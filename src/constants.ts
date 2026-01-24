@@ -15,11 +15,13 @@ export enum PaymentStatus {
 // Use this if you're using Event based ticketing
 export enum Tickets {
   Test = 0,
+  Accommodation = 2626,
 }
 
 // It's for mapping the events with their collection names in Firestore
 export const EventMappings: Record<number, string> = {
   [Tickets.Test]: "test",
+  [Tickets.Accommodation]: "accommodation",
 };
 
 // Used for mapping price with ticket IDs, use only if your have price based ticketing
