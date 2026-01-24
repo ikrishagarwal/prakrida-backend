@@ -1,6 +1,6 @@
-# Base Codebase for TiQr
+# Backend Service for Prakrida 26
 
-This is the base codebase for TiQr, the ticketing backend service. It is built using Fastify and TypeScript, and uses Firebase as the backend database.
+This repository contains the backend service for Prakrida 26, the annual sports fest at BIT Patna, built using Fastify and TypeScript.
 
 # Endpoints
 
