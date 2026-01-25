@@ -10,7 +10,6 @@ const db = getFirestore();
 interface EventBooking {
   status: "pending" | "confirmed";
   type: "solo" | "team";
-  isBitStudent: boolean;
   paymentUrl?: string;
   updatedAt: FirebaseFirestore.Timestamp;
 }
@@ -31,10 +30,9 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
   fastify.post("/events/book", async (request, reply) => {
     const user = request.getDecorator<DecodedIdToken>("user");
-    const { eventId, type, isBitStudent } = request.body as {
+    const { eventId, type, } = request.body as {
     eventId: number;
     type: "solo" | "group";
-    isBitStudent: boolean;
   };
 
     const userRef = db
@@ -52,7 +50,6 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
     }
 
     const eventData = {
-      isBitStudent,
       paymentUrl: "",
       status: "confirmed",
       type,
@@ -120,7 +117,6 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       eventId,
       status: eventData.status,
       type: eventData.type,
-      isBitStudent: eventData.isBitStudent,
       paymentUrl: eventData.paymentUrl ?? "",
       updatedAt: eventData.updatedAt,
     };

@@ -39,6 +39,36 @@ export enum Tickets {
 }
 
 // It's for mapping the events with their collection names in Firestore
+export const EventMappings: Record<number, string> = {
+    [Tickets.VolleyballMen]: "volleyball_men",
+  [Tickets.VolleyballWomen]: "volleyball_women",
+
+  [Tickets.BasketballMen]: "basketball_men",
+  [Tickets.BasketballWomen]: "basketball_women",
+
+  [Tickets.CricketMen]: "cricket_men",
+  [Tickets.CricketWomen]: "cricket_women",
+
+  [Tickets.FootballMen]: "football_men",
+  [Tickets.FootballWomen]: "football_women",
+
+  [Tickets.BadmintonMen]: "badminton_men",
+  [Tickets.BadmintonWomen]: "badminton_women",
+
+  [Tickets.TableTennisTeamMen]: "tt_team_men",
+  [Tickets.TableTennisTeamWomen]: "tt_team_women",
+  [Tickets.TableTennisSoloMen]: "tt_solo_men",
+  [Tickets.TableTennisWomenSolo]: "tt_solo_women",
+  [Tickets.TableTennisMixedDoubles]: "tt_mixed_doubles",
+
+  [Tickets.ChessMen]: "chess_men",
+  [Tickets.ChessWomen]: "chess_women",
+
+  [Tickets.FreeFire]: "free_fire",
+  [Tickets.BGMIValorant]: "bgmi_valorant",
+  [Tickets.Carrom]: "carrom",
+};
+
 export const eventMappings: Record<number, Tickets> = {
   // --- Cricket ---
   1: Tickets.CricketMen,      // Cricket: Men's
