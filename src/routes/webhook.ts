@@ -60,7 +60,7 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
       "phone_number",
       "quantity",
       "ticket_type",
-      "ticket_price",
+      "ticket_price"
     ];
 
     for (const key of allowedFields) {
@@ -87,16 +87,15 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
 
     switch (ticketId) {
       case Tickets.Test:
-        const testRef = db.collection(collectionName).doc(body.booking_uid);
-        const testSnap = await testRef.get();
-
-        if (testSnap.exists) {
-          await testRef.update({
+      case Tickets.Accommodation:
+        const ref = db.collection(collectionName).doc(body.booking_uid);
+        const snap = await ref.get();
+        if (snap.exists) {
+          await ref.update({
             paymentStatus: body.booking_status,
             updatedAt: FieldValue.serverTimestamp(),
           });
         }
-
         break;
     }
 

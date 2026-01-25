@@ -15,6 +15,7 @@ export enum PaymentStatus {
 // Use this if you're using Event based ticketing
 // NOTE: Add all the ticket IDs here instead of hardcoding them
 export enum Tickets {
+  Test = 0,
   VolleyballMen = 2611,
   BasketballWomen = 2614,
   FreeFire = 2618,
@@ -35,12 +36,15 @@ export enum Tickets {
   FootballWomen = 2608,
   ChessMen = 2609,
   ChessWomen = 2610,
-  Carrom = 2625
+  Carrom = 2625,
+  Accommodation = 2626,
 }
 
 // It's for mapping the events with their collection names in Firestore
 export const EventMappings: Record<number, string> = {
-    [Tickets.VolleyballMen]: "volleyball_men",
+  [Tickets.Accommodation]: "accommodation",
+  
+  [Tickets.VolleyballMen]: "volleyball_men",
   [Tickets.VolleyballWomen]: "volleyball_women",
 
   [Tickets.BasketballMen]: "basketball_men",
