@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import Fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
 import cors from "@fastify/cors";
 import { readdirSync } from "node:fs";
@@ -56,6 +57,10 @@ for (const dir of dirs) {
     }
   }
 }
+// Minimal test route for diagnostics
+app.get("/test", async (request, reply) => {
+  return { message: "Test route works" };
+});
 
 export default app;
 export { app, options };
