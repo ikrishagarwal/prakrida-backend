@@ -24,10 +24,9 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
+    "@types/node": "^24.0.8",
     "fastify-tsconfig": "^3.0.0",
-    "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.2"
   }
 }

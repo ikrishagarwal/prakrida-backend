@@ -15,7 +15,7 @@ const options: AppOptions = {
       target: "pino-pretty",
       options: {
         colorize: true,
-        translateTime: "HH:mm:ss",
+        translateTime: "HH:MM:ss",
         singleLine: false,
         ignore: "pid,hostname,reqId,responseTime,level",
       },
