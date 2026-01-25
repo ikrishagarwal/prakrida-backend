@@ -1,0 +1,26 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependency directories
+node_modules
+
+# Optional REPL history
+.node_repl_history
+
+# vim swap files
+*.swp
+
+# vscode
+.vscode
+*code-workspace
+
+# compiled app
+dist
+
+# sensitive files
+.env
+serviceAccountKey.json
+
+*.csv
