@@ -5,9 +5,9 @@ import type { DecodedIdToken } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import z from "zod";
 import { PaymentStatus, Tickets } from "../constants";
-import { validateAuthToken } from "./auth";
-import { db } from "./firebase";
-import TiQR, { FetchBookingResponse, BookingResponse } from "./tiqr";
+import { validateAuthToken } from "../lib/auth";
+import { db } from "../lib/firebase";
+import TiQR, { FetchBookingResponse, BookingResponse } from "../lib/tiqr";
 
 const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
