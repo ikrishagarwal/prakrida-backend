@@ -1,15 +1,17 @@
 import { FastifyPluginAsync } from "fastify";
 import { validateAuthToken } from "../lib/auth";
 import { DecodedIdToken } from "firebase-admin/auth";
-import { Tickets } from "../constants";
 import { eventMappings } from "../constants";
 import { getFirestore } from "firebase-admin/firestore";
+import TiQR, {BookingResponse, FetchBookingResponse} from "../lib/tiqr";
+import { PaymentStatus } from "../constants";
 
 const db = getFirestore();
 
 interface EventBooking {
-  status: "pending" | "confirmed";
-  type: "solo" | "team";
+  status: PaymentStatus;
+  type: "solo" | "group";
+  members?: {name: string, email: string, phone: string}[]
   paymentUrl?: string;
   updatedAt: FirebaseFirestore.Timestamp;
 }
@@ -19,7 +21,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
   fastify.addHook("onRequest", async (request, reply) => {
     const user = await validateAuthToken(request).catch(() => null);
     if (!user) {
-      reply //
+      reply
         .code(401)
         .send({ error: "Unauthorized" });
       return;
@@ -30,56 +32,84 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
   fastify.post("/events/book", async (request, reply) => {
     const user = request.getDecorator<DecodedIdToken>("user");
-    const { eventId, type, } = request.body as {
-    eventId: number;
-    type: "solo" | "group";
-  };
+
+    const { eventId, type, members } = request.body as {
+      eventId: number;
+      type: "solo" | "group";
+      members?: Array<{ name: string, email: string, phone: string }>
+    };
+
+    const ticketId = eventMappings[eventId];
+
+    if (!ticketId) {
+      return reply.code(400).send({ error: "Invalid eventId" });
+    }
+
+    if (type === "group" && !members?.length) {
+      return reply.code(400).send({ error: "Group events require members list" });
+    }
 
     const userRef = db
-    .collection("events_registrations")
-    .doc(user.uid);
+      .collection("events_registrations")
+      .doc(user.uid);
 
     const docSnap = await userRef.get();
-
     const eventPath = `events.${eventId}`;
 
-    if (docSnap.exists && docSnap.get(eventPath)) {
-      return reply.code(409).send({
-        error: "Already registered for this event",
-      });
+    const existingEvent = docSnap.exists ? docSnap.get(eventPath) : null;
+
+    if (existingEvent && existingEvent.status === PaymentStatus.Confirmed) {
+      return reply.code(409).send({ error: "Already registered for this event" });
     }
 
-    const eventData = {
-      paymentUrl: "",
-      status: "confirmed",
-      type,
-      updatedAt: new Date(),
-    };
-
-    // 🆕 First time user
-    if (!docSnap.exists) {
-      await userRef.set({
-        email: user.email,
-        createdAt: new Date(),
-        events: {
-          [eventId]: eventData,
+    const bookingPayload = {
+        first_name: user.name?.split(" ")[0] ?? "User",
+        last_name: user.name?.split(" ").slice(1).join(" ") ?? "",
+        email: user.email!,
+        phone_number: user.phone_number ?? "",
+        ticket: ticketId,
+        meta_data: {
+          uid: user.uid,
+          eventId,
+          type,
         },
-        name: user.name,
-        phone: user.phone_number
-      });
-    } 
-    // ➕ Existing user, new event
-    else {
-      await userRef.update({
-        [eventPath]: eventData,
-      });
-    }
+        callback_url: `${TiQR.BASE_URL}/webhooks/tiqr`,
+      };
 
-    return {
-      message: "Event booked successfully",
-      eventId,
-      status: "confirmed",
-    };
+      const tiqrRes = await TiQR.createBooking(bookingPayload);
+      const tiqrData = await tiqrRes.json() as BookingResponse;
+
+      const paymentUrl = tiqrData.payment.url_to_redirect;
+
+      const eventData: EventBooking = {
+        paymentUrl,
+        status: PaymentStatus.PendingPayment,
+        type,
+        members: members ?? [],
+        updatedAt: new Date() as any,
+      };
+
+      if (!docSnap.exists) {
+        await userRef.set({
+          email: user.email,
+          name: user.name,
+          phone: user.phone_number ?? "",
+          createdAt: new Date(),
+          events: {
+            [eventId]: eventData,
+          },
+        });
+      } else {
+        await userRef.update({
+          [eventPath]: eventData,
+        });
+      }
+
+      return {
+        message: "Booking created",
+        status: "pending",
+        paymentUrl,
+      };
 });
 
   fastify.get("/events/status/:eventId", async (request, reply) => {
@@ -92,7 +122,6 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
     const userSnap = await userRef.get();
 
-    // User never registered for any event
     if (!userSnap.exists) {
       return {
         eventId,
@@ -100,26 +129,38 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       };
     }
 
-    // Path: events.2 / events.116
     const eventPath = `events.${eventId}`;
     const eventData = userSnap.get(eventPath);
 
-    // User exists but not for this event
-    if (!eventData) {
-      return {
-        eventId,
-        status: "not_registered",
-      };
-    }
+if (!eventData) {
+  return { eventId, status: "not_registered" };
+}
 
-    // User registered for this event
-    return {
-      eventId,
-      status: eventData.status,
-      type: eventData.type,
-      paymentUrl: eventData.paymentUrl ?? "",
-      updatedAt: eventData.updatedAt,
-    };
+if (eventData.status !== PaymentStatus.Confirmed) {
+  try {
+    const res = await TiQR.fetchBooking(eventData.tiqrUid);
+    const bookingData = await res.json() as FetchBookingResponse;
+    const tiqrStatus = bookingData.status === PaymentStatus.Confirmed ? PaymentStatus.Confirmed : eventData.status;
+
+    if (tiqrStatus !== eventData.status) {
+      await userRef.update({
+        [`events.${eventId}.status`]: tiqrStatus,
+        [`events.${eventId}.updatedAt`]: new Date(),
+      });
+      eventData.status = tiqrStatus;
+    }
+  } catch (err) {
+    console.error("Error fetching TiQR status:", err);
+  }
+}
+
+return {
+  eventId,
+  status: eventData.status,
+  type: eventData.type,
+  paymentUrl: eventData.paymentUrl ?? "",
+  updatedAt: eventData.updatedAt,
+};
 });
 
   fastify.get("/events/registered", async (request, reply) => {
