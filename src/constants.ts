@@ -39,32 +39,49 @@ export enum Tickets {
 }
 
 // It's for mapping the events with their collection names in Firestore
-export const EventMappings: Record<number, string> = {
-    [Tickets.VolleyballMen]: "volleyball_men",
-  [Tickets.VolleyballWomen]: "volleyball_women",
+export const eventMappings: Record<number, Tickets> = {
+  // --- Cricket ---
+  1: Tickets.CricketMen,      // Cricket: Men's
+  2: Tickets.CricketWomen,    // Cricket: Women's
 
-  [Tickets.BasketballMen]: "basketball_men",
-  [Tickets.BasketballWomen]: "basketball_women",
+  // --- Football ---
+  3: Tickets.FootballMen,     // Football: Men's
+  4: Tickets.FootballWomen,   // Football: Women's
 
-  [Tickets.CricketMen]: "cricket_men",
-  [Tickets.CricketWomen]: "cricket_women",
+  // --- Chess ---
+  5: Tickets.ChessMen,        // Chess: Men's
+  6: Tickets.ChessWomen,      // Chess: Women's
 
-  [Tickets.FootballMen]: "football_men",
-  [Tickets.FootballWomen]: "football_women",
+  // --- Volleyball ---
+  7: Tickets.VolleyballMen,   // Volleyball: Men's
+  8: Tickets.VolleyballWomen, // Volleyball: Women's
 
-  [Tickets.BadmintonMen]: "badminton_men",
-  [Tickets.BadmintonWomen]: "badminton_women",
+  // --- Basketball ---
+  9: Tickets.BasketballMen,   // Basketball: Men's
+  10: Tickets.BasketballWomen,// Basketball: Women's
 
-  [Tickets.TableTennisTeamMen]: "tt_team_men",
-  [Tickets.TableTennisTeamWomen]: "tt_team_women",
-  [Tickets.TableTennisSoloMen]: "tt_solo_men",
-  [Tickets.TableTennisWomenSolo]: "tt_solo_women",
-  [Tickets.TableTennisMixedDoubles]: "tt_mixed_doubles",
+  // --- Badminton ---
+  11: Tickets.BadmintonMen,   // Badminton: Men's
+  12: Tickets.BadmintonWomen, // Badminton: Women's
 
-  [Tickets.ChessMen]: "chess_men",
-  [Tickets.ChessWomen]: "chess_women",
+  // --- E-sports ---
+  13: Tickets.BGMIValorant,   // E-sports: BGMI
+  14: Tickets.BGMIValorant,   // E-sports: Valorant
+  15: Tickets.FreeFire,       // E-sports: Free-Fire
 
-  [Tickets.FreeFire]: "free_fire",
-  [Tickets.BGMIValorant]: "bgmi_valorant",
-  [Tickets.Carrom]: "carrom",
+  // --- Lawn-Tennis ---
+  16: Tickets.LawnTennis,     // Lawn-Tennis: Men's
+  17: Tickets.LawnTennis,     // Lawn-Tennis: Women's
+
+  // --- Table Tennis ---
+  18: Tickets.TableTennisTeamMen,      // Table Tennis: Team Men's
+  19: Tickets.TableTennisTeamWomen,    // Table Tennis: Team Women's
+  20: Tickets.TableTennisSoloMen,      // Table Tennis: Single Men's
+  21: Tickets.TableTennisWomenSolo,    // Table Tennis: Single Women's
+  22: Tickets.TableTennisMixedDoubles, // Table Tennis: Mixed Double
+
+  // --- Carrom ---
+  23: Tickets.Carrom,         // Carrom: Men's
+  24: Tickets.Carrom,         // Carrom: Women's
+  25: Tickets.Carrom,         // Carrom: Mixed Double
 };

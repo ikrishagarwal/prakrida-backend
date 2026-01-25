@@ -2,16 +2,23 @@ import { FastifyPluginAsync } from "fastify";
 import { validateAuthToken } from "../lib/auth";
 import { DecodedIdToken } from "firebase-admin/auth";
 import { Tickets } from "../constants";
-import { EventMappings } from "../constants";
+import { eventMappings } from "../constants";
 import { getFirestore } from "firebase-admin/firestore";
 
 const db = getFirestore();
+
+interface EventBooking {
+  status: "pending" | "confirmed";
+  type: "solo" | "team";
+  isBitStudent: boolean;
+  paymentUrl?: string;
+  updatedAt: FirebaseFirestore.Timestamp;
+}
 
 const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
   fastify.decorateRequest("user", null);
   fastify.addHook("onRequest", async (request, reply) => {
     const user = await validateAuthToken(request).catch(() => null);
-
     if (!user) {
       reply //
         .code(401)
@@ -24,96 +31,133 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
   fastify.post("/events/book", async (request, reply) => {
     const user = request.getDecorator<DecodedIdToken>("user");
-    const { ticketId } = request.body as { ticketId: number };
+    const { eventId, type, isBitStudent } = request.body as {
+    eventId: number;
+    type: "solo" | "group";
+    isBitStudent: boolean;
+  };
 
-    const collectionName = EventMappings[ticketId as Tickets];
-    if (!collectionName) {
-      return reply.code(400).send({ error: "Invalid ticketId" });
-    }
+    const userRef = db
+    .collection("events_registrations")
+    .doc(user.uid);
 
-    const bookingRef = db
-      .collection(collectionName)
-      .doc(user.uid);
+    const docSnap = await userRef.get();
 
-    const existing = await bookingRef.get();
-    if (existing.exists) {
+    const eventPath = `events.${eventId}`;
+
+    if (docSnap.exists && docSnap.get(eventPath)) {
       return reply.code(409).send({
         error: "Already registered for this event",
       });
     }
 
-    await bookingRef.set({
-      userId: user.uid,
-      ticketId,
-      status: "pending",
-      createdAt: Date.now(),
-    });
+    const eventData = {
+      isBitStudent,
+      paymentUrl: "",
+      status: "confirmed",
+      type,
+      updatedAt: new Date(),
+    };
+
+    // 🆕 First time user
+    if (!docSnap.exists) {
+      await userRef.set({
+        email: user.email,
+        createdAt: new Date(),
+        events: {
+          [eventId]: eventData,
+        },
+        name: user.name,
+        phone: user.phone_number
+      });
+    } 
+    // ➕ Existing user, new event
+    else {
+      await userRef.update({
+        [eventPath]: eventData,
+      });
+    }
 
     return {
-      message: "Booking initiated",
-      ticketId,
-      event: collectionName,
-      status: "pending",
+      message: "Event booked successfully",
+      eventId,
+      status: "confirmed",
     };
-  });
+});
 
   fastify.get("/events/status/:eventId", async (request, reply) => {
     const user = request.getDecorator<DecodedIdToken>("user");
     const { eventId } = request.params as { eventId: string };
 
-    const ticketId = Number(eventId);
-    const collectionName = EventMappings[ticketId as Tickets];
+    const userRef = db
+    .collection("events_registrations")
+    .doc(user.uid);
 
-    if (!collectionName) {
-      return reply.code(400).send({ error: "Invalid eventId" });
-    }
+    const userSnap = await userRef.get();
 
-    const bookingRef = db
-      .collection(collectionName)
-      .doc(user.uid);
-
-    const bookingSnap = await bookingRef.get();
-
-    if (!bookingSnap.exists) {
+    // User never registered for any event
+    if (!userSnap.exists) {
       return {
-        ticketId,
+        eventId,
         status: "not_registered",
       };
     }
 
+    // Path: events.2 / events.116
+    const eventPath = `events.${eventId}`;
+    const eventData = userSnap.get(eventPath);
+
+    // User exists but not for this event
+    if (!eventData) {
+      return {
+        eventId,
+        status: "not_registered",
+      };
+    }
+
+    // User registered for this event
     return {
-      ticketId,
-      ...bookingSnap.data(),
+      eventId,
+      status: eventData.status,
+      type: eventData.type,
+      isBitStudent: eventData.isBitStudent,
+      paymentUrl: eventData.paymentUrl ?? "",
+      updatedAt: eventData.updatedAt,
     };
-  });
+});
 
   fastify.get("/events/registered", async (request, reply) => {
     const user = request.getDecorator<DecodedIdToken>("user");
-    const results: any[] = [];
+    const userRef = db
+        .collection("events_registrations")
+        .doc(user.uid);
 
-    // Loop over ALL mapped events
-    for (const [ticketIdStr, collectionName] of Object.entries(EventMappings)) {
-      const ticketId = Number(ticketIdStr);
+      const userSnap = await userRef.get();
 
-      const doc = await db
-        .collection(collectionName)
-        .doc(user.uid)
-        .get();
-
-      if (doc.exists) {
-        results.push({
-          ticketId,
-          event: collectionName,
-          ...doc.data(),
-        });
+      if (!userSnap.exists) {
+        return {
+          count: 0,
+          events: [],
+        };
       }
-    }
 
-    return {
-      count: results.length,
-      events: results,
-    };
-  });
+      const data = userSnap.data() as {
+  events?: Record<string, EventBooking>;
+};;
+      const eventsMap = data?.events ?? {};
+
+      const results = Object.entries(eventsMap).map(
+        ([eventId, eventData]) => ({
+          eventId,
+          ...eventData,
+        })
+      );
+
+      return {
+        count: results.length,
+        events: results,
+      };
+    });
 };
 
 export default Event;
