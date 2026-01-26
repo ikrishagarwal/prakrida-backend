@@ -44,7 +44,7 @@ export const EventMappings: Record<number, string> = {
   [Tickets.Accommodation]: "accommodation",
 };
 
-export const eventMappings: Record<number, Tickets> = {
+export const EventIds: Record<number, Tickets> = {
   // --- Cricket ---
   1: Tickets.CricketMen, // Cricket: Men's
   2: Tickets.CricketWomen, // Cricket: Women's

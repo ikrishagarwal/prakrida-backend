@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import { validateAuthToken } from "../lib/auth";
 import { DecodedIdToken } from "firebase-admin/auth";
-import { eventMappings } from "../constants";
+import { EventIds } from "../constants";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../lib/firebase";
 import TiQR, { BookingResponse, FetchBookingResponse } from "../lib/tiqr";
@@ -45,7 +45,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
     const { eventId, type, members, name, phone, college } = body.data;
 
-    const ticketId = eventMappings[eventId];
+    const ticketId = EventIds[eventId];
 
     if (!ticketId) {
       return reply.code(400).send({ error: "Invalid eventId" });

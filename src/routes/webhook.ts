@@ -102,9 +102,7 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
     }
 
     if (EventTicketIds.includes(ticketId)) {
-      const eventId = Object.entries(EventMappings).find(
-        ([_, value]) => Number(value) === ticketId,
-      )?.[0];
+      const eventId = tiqrData.meta_data.eventId;
 
       if (!eventId) {
         fastify.log.error("Failed to find event ID for ticket ID: " + ticketId);
