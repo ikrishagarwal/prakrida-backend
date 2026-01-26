@@ -13,24 +13,109 @@ export enum PaymentStatus {
 }
 
 // Use this if you're using Event based ticketing
+// NOTE: Add all the ticket IDs here instead of hardcoding them
 export enum Tickets {
   Test = 0,
+  VolleyballMen = 2611,
+  BasketballWomen = 2614,
+  FreeFire = 2618,
+  LawnTennis = 2619,
+  TableTennisTeamWomen = 2621,
+  TableTennisWomenSolo = 2623,
+  VolleyballWomen = 2612,
+  BadmintonMen = 2615,
+  TableTennisSoloMen = 2622,
+  BasketballMen = 2613,
+  BadmintonWomen = 2616,
+  BGMIValorant = 2617,
+  TableTennisTeamMen = 2620,
+  TableTennisMixedDoubles = 2624,
+  CricketMen = 2605,
+  CricketWomen = 2606,
+  FootballMen = 2607,
+  FootballWomen = 2608,
+  ChessMen = 2609,
+  ChessWomen = 2610,
+  Carrom = 2625,
   Accommodation = 2626,
 }
 
 // It's for mapping the events with their collection names in Firestore
 export const EventMappings: Record<number, string> = {
-  [Tickets.Test]: "test",
   [Tickets.Accommodation]: "accommodation",
+  
+  [Tickets.VolleyballMen]: "volleyball_men",
+  [Tickets.VolleyballWomen]: "volleyball_women",
+
+  [Tickets.BasketballMen]: "basketball_men",
+  [Tickets.BasketballWomen]: "basketball_women",
+
+  [Tickets.CricketMen]: "cricket_men",
+  [Tickets.CricketWomen]: "cricket_women",
+
+  [Tickets.FootballMen]: "football_men",
+  [Tickets.FootballWomen]: "football_women",
+
+  [Tickets.BadmintonMen]: "badminton_men",
+  [Tickets.BadmintonWomen]: "badminton_women",
+
+  [Tickets.TableTennisTeamMen]: "tt_team_men",
+  [Tickets.TableTennisTeamWomen]: "tt_team_women",
+  [Tickets.TableTennisSoloMen]: "tt_solo_men",
+  [Tickets.TableTennisWomenSolo]: "tt_solo_women",
+  [Tickets.TableTennisMixedDoubles]: "tt_mixed_doubles",
+
+  [Tickets.ChessMen]: "chess_men",
+  [Tickets.ChessWomen]: "chess_women",
+
+  [Tickets.FreeFire]: "free_fire",
+  [Tickets.BGMIValorant]: "bgmi_valorant",
+  [Tickets.Carrom]: "carrom",
 };
 
-// Used for mapping price with ticket IDs, use only if your have price based ticketing
-export const TicketPriceToIdMap = {
-  19: 0,
-};
+export const eventMappings: Record<number, Tickets> = {
+  // --- Cricket ---
+  1: Tickets.CricketMen,      // Cricket: Men's
+  2: Tickets.CricketWomen,    // Cricket: Women's
 
-export const EventTickets = Object.values(TicketPriceToIdMap);
+  // --- Football ---
+  3: Tickets.FootballMen,     // Football: Men's
+  4: Tickets.FootballWomen,   // Football: Women's
 
-export const EventIdToPriceMap = {
-  2: 19,
+  // --- Chess ---
+  5: Tickets.ChessMen,        // Chess: Men's
+  6: Tickets.ChessWomen,      // Chess: Women's
+
+  // --- Volleyball ---
+  7: Tickets.VolleyballMen,   // Volleyball: Men's
+  8: Tickets.VolleyballWomen, // Volleyball: Women's
+
+  // --- Basketball ---
+  9: Tickets.BasketballMen,   // Basketball: Men's
+  10: Tickets.BasketballWomen,// Basketball: Women's
+
+  // --- Badminton ---
+  11: Tickets.BadmintonMen,   // Badminton: Men's
+  12: Tickets.BadmintonWomen, // Badminton: Women's
+
+  // --- E-sports ---
+  13: Tickets.BGMIValorant,   // E-sports: BGMI
+  14: Tickets.BGMIValorant,   // E-sports: Valorant
+  15: Tickets.FreeFire,       // E-sports: Free-Fire
+
+  // --- Lawn-Tennis ---
+  16: Tickets.LawnTennis,     // Lawn-Tennis: Men's
+  17: Tickets.LawnTennis,     // Lawn-Tennis: Women's
+
+  // --- Table Tennis ---
+  18: Tickets.TableTennisTeamMen,      // Table Tennis: Team Men's
+  19: Tickets.TableTennisTeamWomen,    // Table Tennis: Team Women's
+  20: Tickets.TableTennisSoloMen,      // Table Tennis: Single Men's
+  21: Tickets.TableTennisWomenSolo,    // Table Tennis: Single Women's
+  22: Tickets.TableTennisMixedDoubles, // Table Tennis: Mixed Double
+
+  // --- Carrom ---
+  23: Tickets.Carrom,         // Carrom: Men's
+  24: Tickets.Carrom,         // Carrom: Women's
+  25: Tickets.Carrom,         // Carrom: Mixed Double
 };
