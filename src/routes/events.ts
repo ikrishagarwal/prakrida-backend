@@ -2,19 +2,21 @@ import { FastifyPluginAsync } from "fastify";
 import { validateAuthToken } from "../lib/auth";
 import { DecodedIdToken } from "firebase-admin/auth";
 import { eventMappings } from "../constants";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
+import { db } from "../lib/firebase";
 import TiQR, { BookingResponse, FetchBookingResponse } from "../lib/tiqr";
 import { PaymentStatus } from "../constants";
 import { FieldValue } from "firebase-admin/firestore";
-
-const db = getFirestore();
+import z from "zod";
 
 interface EventBooking {
   status: PaymentStatus;
   type: "solo" | "group";
   members?: { name: string; email: string; phone: string }[];
   paymentUrl?: string;
+  tiqrBookingUid: string;
   updatedAt: FirebaseFirestore.Timestamp;
+  college?: string;
 }
 
 const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
@@ -32,11 +34,16 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
   fastify.post("/events/book", async (request, reply) => {
     const user = request.getDecorator<DecodedIdToken>("user");
 
-    const { eventId, type, members } = request.body as {
-      eventId: number;
-      type: "solo" | "group";
-      members?: Array<{ name: string; email: string; phone: string }>;
-    };
+    const body = BookEventsPayload.safeParse(request.body);
+    if (!body.success) {
+      reply.code(400);
+      return {
+        error: "Invalid request body",
+        details: z.prettifyError(body.error),
+      };
+    }
+
+    const { eventId, type, members, name, phone, college } = body.data;
 
     const ticketId = eventMappings[eventId];
 
@@ -64,15 +71,16 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
     }
 
     const bookingPayload = {
-      first_name: user.name?.split(" ")[0] ?? "User",
-      last_name: user.name?.split(" ").slice(1).join(" ") ?? "",
+      first_name: name?.split(" ")[0] ?? "User",
+      last_name: name?.split(" ").slice(1).join(" ") ?? "",
       email: user.email!,
-      phone_number: user.phone_number ?? "",
+      phone_number: phone ?? "",
       ticket: ticketId,
       meta_data: {
         uid: user.uid,
         eventId,
         type,
+        college,
         members: members ?? [],
       },
     };
@@ -84,17 +92,19 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
     const eventData: EventBooking = {
       paymentUrl,
+      tiqrBookingUid: tiqrData.booking.uid,
       status: PaymentStatus.PendingPayment,
       type,
       members: members ?? [],
+      college,
       updatedAt: FieldValue.serverTimestamp() as Timestamp,
     };
 
     if (!docSnap.exists) {
       await userRef.set({
         email: user.email,
-        name: user.name,
-        phone: user.phone_number ?? "",
+        name: name,
+        phone: phone ?? "",
         createdAt: FieldValue.serverTimestamp(),
         events: {
           [eventId]: eventData,
@@ -102,6 +112,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       });
     } else {
       await userRef.update({
+        college,
         [eventPath]: eventData,
       });
     }
@@ -137,7 +148,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
     if (eventData.status !== PaymentStatus.Confirmed) {
       try {
-        const res = await TiQR.fetchBooking(eventData.tiqrUid);
+        const res = await TiQR.fetchBooking(eventData.tiqrBookingUid);
         const bookingData = (await res.json()) as FetchBookingResponse;
         const tiqrStatus = bookingData.status;
 
@@ -191,5 +202,22 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
     };
   });
 };
+
+const BookEventsPayload = z.object({
+  eventId: z.coerce.number().min(1),
+  type: z.enum(["solo", "group"]),
+  members: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        email: z.string().email(),
+        phone: z.string().min(10),
+      }),
+    )
+    .optional(),
+  name: z.string().min(1),
+  phone: z.string().min(10),
+  college: z.string().min(1),
+});
 
 export default Event;

@@ -15,7 +15,6 @@ export enum PaymentStatus {
 // Use this if you're using Event based ticketing
 // NOTE: Add all the ticket IDs here instead of hardcoding them
 export enum Tickets {
-  Test = 0,
   VolleyballMen = 2611,
   BasketballWomen = 2614,
   FreeFire = 2618,
@@ -43,79 +42,53 @@ export enum Tickets {
 // It's for mapping the events with their collection names in Firestore
 export const EventMappings: Record<number, string> = {
   [Tickets.Accommodation]: "accommodation",
-  
-  [Tickets.VolleyballMen]: "volleyball_men",
-  [Tickets.VolleyballWomen]: "volleyball_women",
-
-  [Tickets.BasketballMen]: "basketball_men",
-  [Tickets.BasketballWomen]: "basketball_women",
-
-  [Tickets.CricketMen]: "cricket_men",
-  [Tickets.CricketWomen]: "cricket_women",
-
-  [Tickets.FootballMen]: "football_men",
-  [Tickets.FootballWomen]: "football_women",
-
-  [Tickets.BadmintonMen]: "badminton_men",
-  [Tickets.BadmintonWomen]: "badminton_women",
-
-  [Tickets.TableTennisTeamMen]: "tt_team_men",
-  [Tickets.TableTennisTeamWomen]: "tt_team_women",
-  [Tickets.TableTennisSoloMen]: "tt_solo_men",
-  [Tickets.TableTennisWomenSolo]: "tt_solo_women",
-  [Tickets.TableTennisMixedDoubles]: "tt_mixed_doubles",
-
-  [Tickets.ChessMen]: "chess_men",
-  [Tickets.ChessWomen]: "chess_women",
-
-  [Tickets.FreeFire]: "free_fire",
-  [Tickets.BGMIValorant]: "bgmi_valorant",
-  [Tickets.Carrom]: "carrom",
 };
 
 export const eventMappings: Record<number, Tickets> = {
   // --- Cricket ---
-  1: Tickets.CricketMen,      // Cricket: Men's
-  2: Tickets.CricketWomen,    // Cricket: Women's
+  1: Tickets.CricketMen, // Cricket: Men's
+  2: Tickets.CricketWomen, // Cricket: Women's
 
   // --- Football ---
-  3: Tickets.FootballMen,     // Football: Men's
-  4: Tickets.FootballWomen,   // Football: Women's
+  3: Tickets.FootballMen, // Football: Men's
+  4: Tickets.FootballWomen, // Football: Women's
 
   // --- Chess ---
-  5: Tickets.ChessMen,        // Chess: Men's
-  6: Tickets.ChessWomen,      // Chess: Women's
+  5: Tickets.ChessMen, // Chess: Men's
+  6: Tickets.ChessWomen, // Chess: Women's
 
   // --- Volleyball ---
-  7: Tickets.VolleyballMen,   // Volleyball: Men's
+  7: Tickets.VolleyballMen, // Volleyball: Men's
   8: Tickets.VolleyballWomen, // Volleyball: Women's
 
   // --- Basketball ---
-  9: Tickets.BasketballMen,   // Basketball: Men's
-  10: Tickets.BasketballWomen,// Basketball: Women's
+  9: Tickets.BasketballMen, // Basketball: Men's
+  10: Tickets.BasketballWomen, // Basketball: Women's
 
   // --- Badminton ---
-  11: Tickets.BadmintonMen,   // Badminton: Men's
+  11: Tickets.BadmintonMen, // Badminton: Men's
   12: Tickets.BadmintonWomen, // Badminton: Women's
 
   // --- E-sports ---
-  13: Tickets.BGMIValorant,   // E-sports: BGMI
-  14: Tickets.BGMIValorant,   // E-sports: Valorant
-  15: Tickets.FreeFire,       // E-sports: Free-Fire
+  13: Tickets.BGMIValorant, // E-sports: BGMI
+  14: Tickets.BGMIValorant, // E-sports: Valorant
+  15: Tickets.FreeFire, // E-sports: Free-Fire
 
   // --- Lawn-Tennis ---
-  16: Tickets.LawnTennis,     // Lawn-Tennis: Men's
-  17: Tickets.LawnTennis,     // Lawn-Tennis: Women's
+  16: Tickets.LawnTennis, // Lawn-Tennis: Men's
+  17: Tickets.LawnTennis, // Lawn-Tennis: Women's
 
   // --- Table Tennis ---
-  18: Tickets.TableTennisTeamMen,      // Table Tennis: Team Men's
-  19: Tickets.TableTennisTeamWomen,    // Table Tennis: Team Women's
-  20: Tickets.TableTennisSoloMen,      // Table Tennis: Single Men's
-  21: Tickets.TableTennisWomenSolo,    // Table Tennis: Single Women's
+  18: Tickets.TableTennisTeamMen, // Table Tennis: Team Men's
+  19: Tickets.TableTennisTeamWomen, // Table Tennis: Team Women's
+  20: Tickets.TableTennisSoloMen, // Table Tennis: Single Men's
+  21: Tickets.TableTennisWomenSolo, // Table Tennis: Single Women's
   22: Tickets.TableTennisMixedDoubles, // Table Tennis: Mixed Double
 
   // --- Carrom ---
-  23: Tickets.Carrom,         // Carrom: Men's
-  24: Tickets.Carrom,         // Carrom: Women's
-  25: Tickets.Carrom,         // Carrom: Mixed Double
+  23: Tickets.Carrom, // Carrom: Men's
+  24: Tickets.Carrom, // Carrom: Women's
+  25: Tickets.Carrom, // Carrom: Mixed Double
 };
+
+export const EventTicketIds = Object.values(Tickets) as number[];
