@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import crypto from "node:crypto";
 import { TiQR, BookingResponse } from "../lib/tiqr";
-import { EventMappings, Tickets } from "../constants";
+import { EventMappings, EventTicketIds, Tickets } from "../constants";
 import { db } from "../lib/firebase";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -60,7 +60,7 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
       "phone_number",
       "quantity",
       "ticket_type",
-      "ticket_price"
+      "ticket_price",
     ];
 
     for (const key of allowedFields) {
@@ -86,17 +86,43 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
     const collectionName = EventMappings[ticketId];
 
     switch (ticketId) {
-      case Tickets.Test:
       case Tickets.Accommodation:
-        const ref = db.collection(collectionName).doc(body.booking_uid);
+        const ref = db
+          .collection(collectionName)
+          .where("tiqrBookingUid", "==", body.booking_uid);
         const snap = await ref.get();
-        if (snap.exists) {
-          await ref.update({
+        if (!snap.empty) {
+          await snap.docs[0].ref.update({
             paymentStatus: body.booking_status,
             updatedAt: FieldValue.serverTimestamp(),
           });
         }
-        break;
+        reply.status(204).send();
+        return;
+    }
+
+    if (EventTicketIds.includes(ticketId)) {
+      const eventId = Object.entries(EventMappings).find(
+        ([_, value]) => Number(value) === ticketId,
+      )?.[0];
+
+      if (!eventId) {
+        fastify.log.error("Failed to find event ID for ticket ID: " + ticketId);
+        return reply.status(500).send();
+      }
+
+      const ref = await db
+        .collection("events_registrations")
+        .where("events." + eventId + ".tiqrBookingUid", "==", body.booking_uid)
+        .get();
+
+      if (!ref.empty) {
+        const doc = ref.docs[0];
+        await doc.ref.update({
+          ["events." + eventId + ".status"]: body.booking_status,
+          ["events." + eventId + ".updatedAt"]: FieldValue.serverTimestamp(),
+        });
+      }
     }
 
     reply.status(204).send();
