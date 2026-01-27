@@ -7,7 +7,7 @@ import z from "zod";
 import { PaymentStatus, Tickets } from "../constants";
 import { validateAuthToken } from "../lib/auth";
 import { db } from "../lib/firebase";
-import TiQR, { FetchBookingResponse, BookingResponse } from "../lib/tiqr";
+import TiQR, { FetchBookingResponse, BulkBookingResponse } from "../lib/tiqr";
 
 const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
@@ -23,8 +23,8 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   });
 
   fastify.post("/accommodation/book", async function (request, reply) {
-    const user = request.getDecorator<DecodedIdToken>("user");
-    const body = AccommodationBookingPayload.safeParse(request.body);
+    // const user = request.getDecorator<DecodedIdToken>("user");
+    const body = AccommodationGroupBookingPayload.safeParse(request.body);
     if (!body.success) {
       reply.status(400);
       return {
@@ -33,46 +33,56 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
         details: z.prettifyError(body.error),
       };
     }
-    let userSnap = await db.collection("accommodation").doc(user.uid).get();
-    if (!userSnap.exists) {
-      await userSnap.ref.set({
-        email: user.email,
-        name: body.data.name,
-        phone: body.data.phone,
-        college: body.data.college,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-      userSnap = await userSnap.ref.get();
-    }
-    const userData = userSnap.data() as AccommodationSchema;
-    if (userData.paymentStatus === PaymentStatus.Confirmed) {
+    const { members, college } = body.data;
+    if (!Array.isArray(members) || members.length === 0) {
       reply.status(400);
       return {
         error: true,
-        message: "You have already registered for accommodation",
+        message: "At least one member is required",
       };
     }
-    const tiqrResponse = await TiQR.createBooking({
-      first_name: body.data.name.split(" ")[0],
-      last_name: body.data.name.split(" ").slice(1).join(" "),
-      phone_number: body.data.phone,
-      email: user.email!,
+    // Create bulk booking payload
+    const bookings = members.map((member, i) => ({
+      first_name: member.name.split(" ")[0],
+      last_name: member.name.split(" ").slice(1).join(" "),
+      phone_number: member.phone,
+      email: member.email,
       ticket: Tickets.Accommodation,
+      meta_data: {
+        gender: member.gender,
+        college,
+        index: i,
+      },
+    }));
+    const tiqrResponse = await TiQR.createBulkBooking({ bookings });
+    const tiqrData = (await tiqrResponse.json()) as BulkBookingResponse;
+
+    // Store booking/payment info for each member in Firestore
+    const batch = db.batch();
+    (tiqrData.booking.child_bookings as Array<any>).forEach((childBooking: any, i: number) => {
+      const member = members[i];
+      if (!member) return;
+      const docRef = db.collection("accommodation_group_members").doc(childBooking.uid);
+      batch.set(docRef, {
+        name: member.name,
+        email: member.email,
+        phone: member.phone,
+        gender: member.gender,
+        college,
+        tiqrBookingUid: childBooking.uid,
+        paymentStatus: childBooking.status,
+        paymentUrl: tiqrData.payment.url_to_redirect || "",
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     });
-    const tiqrData = (await tiqrResponse.json()) as BookingResponse;
-    const payload: Partial<AccommodationSchema> = {
-      tiqrBookingUid: tiqrData.booking.uid,
-      paymentStatus: tiqrData.booking.status as PaymentStatus,
-      paymentUrl: tiqrData.payment.url_to_redirect || "",
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-    body.data.preferences && (payload["preferences"] = body.data.preferences);
-    await userSnap.ref.update(payload);
+    await batch.commit();
+
     return {
       success: true,
-      message: "Booked accommodation successfully",
+      message: `Booked accommodation for ${members.length} members successfully`,
       paymentUrl: tiqrData.payment.url_to_redirect,
+      bookingUids: (tiqrData.booking.child_bookings as Array<any>).map((b: any) => b.uid),
     };
   });
 
@@ -125,11 +135,18 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
 
 };
 
-const AccommodationBookingPayload = z.object({
-  name: z.string().min(1),
-  phone: z.string().min(10),
+
+const AccommodationGroupBookingPayload = z.object({
   college: z.string().min(1),
   preferences: z.string().optional(),
+  members: z.array(
+    z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      phone: z.string().min(10),
+      gender: z.enum(["male", "female", "other"]),
+    })
+  ).min(1),
 });
 
 interface AccommodationSchema extends Record<string, any> {
