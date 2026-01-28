@@ -1,3 +1,23 @@
+  // Get all members for a given groupName
+  fastify.get("/accommodation/group/:groupName", async function (request, reply) {
+    const { groupName } = request.params as { groupName: string };
+    if (!groupName) {
+      reply.status(400);
+      return { error: true, message: "groupName is required" };
+    }
+    try {
+      const snap = await db.collection("accommodation_group_members").where("groupName", "==", groupName).get();
+      const members = snap.docs.map(doc => doc.data());
+      return {
+        groupName,
+        count: members.length,
+        members,
+      };
+    } catch (err) {
+      reply.status(500);
+      return { error: true, message: "Failed to fetch group members", details: String(err) };
+    }
+  });
 // accommodation.ts
 // Fastify endpoints for accommodation registration and status
 import type { FastifyPluginAsync } from "fastify";
@@ -8,6 +28,20 @@ import { PaymentStatus, Tickets } from "../constants";
 import { validateAuthToken } from "../lib/auth";
 import { db } from "../lib/firebase";
 import TiQR, { FetchBookingResponse, BulkBookingResponse } from "../lib/tiqr";
+
+const AccommodationGroupBookingPayload = z.object({
+  college: z.string().min(1),
+  groupName: z.string().min(1, 'Group name is required'),
+  preferences: z.string().optional(),
+  members: z.array(
+    z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      phone: z.string().min(10),
+      gender: z.enum(["male", "female", "other"]),
+    })
+  ).min(1),
+});
 
 const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
@@ -23,7 +57,6 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   });
 
   fastify.post("/accommodation/book", async function (request, reply) {
-    // const user = request.getDecorator<DecodedIdToken>("user");
     const body = AccommodationGroupBookingPayload.safeParse(request.body);
     if (!body.success) {
       reply.status(400);
@@ -33,7 +66,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
         details: z.prettifyError(body.error),
       };
     }
-    const { members, college } = body.data;
+    const { members, college, groupName } = body.data;
     if (!Array.isArray(members) || members.length === 0) {
       reply.status(400);
       return {
@@ -51,6 +84,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       meta_data: {
         gender: member.gender,
         college,
+        groupName,
         index: i,
       },
     }));
@@ -69,6 +103,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
         phone: member.phone,
         gender: member.gender,
         college,
+        groupName,
         tiqrBookingUid: childBooking.uid,
         paymentStatus: childBooking.status,
         paymentUrl: tiqrData.payment.url_to_redirect || "",
@@ -80,6 +115,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
 
     return {
       success: true,
+      groupName,
       message: `Booked accommodation for ${members.length} members successfully`,
       paymentUrl: tiqrData.payment.url_to_redirect,
       bookingUids: (tiqrData.booking.child_bookings as Array<any>).map((b: any) => b.uid),
@@ -132,28 +168,15 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       message: "Status fetched successfully",
     };
   });
-
 };
 
-
-const AccommodationGroupBookingPayload = z.object({
-  college: z.string().min(1),
-  preferences: z.string().optional(),
-  members: z.array(
-    z.object({
-      name: z.string().min(1),
-      email: z.string().email(),
-      phone: z.string().min(10),
-      gender: z.enum(["male", "female", "other"]),
-    })
-  ).min(1),
-});
-
+// Only keep the correct interface (with groupName)
 interface AccommodationSchema extends Record<string, any> {
   name: string;
   email: string;
   phone: string;
   college: string;
+  groupName: string;
   preferences?: string;
   tiqrBookingUid?: string;
   paymentStatus?: PaymentStatus;
