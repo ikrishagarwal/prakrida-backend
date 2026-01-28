@@ -1,23 +1,3 @@
-  // Get all members for a given groupName
-  fastify.get("/accommodation/group/:groupName", async function (request, reply) {
-    const { groupName } = request.params as { groupName: string };
-    if (!groupName) {
-      reply.status(400);
-      return { error: true, message: "groupName is required" };
-    }
-    try {
-      const snap = await db.collection("accommodation_group_members").where("groupName", "==", groupName).get();
-      const members = snap.docs.map(doc => doc.data());
-      return {
-        groupName,
-        count: members.length,
-        members,
-      };
-    } catch (err) {
-      reply.status(500);
-      return { error: true, message: "Failed to fetch group members", details: String(err) };
-    }
-  });
 // accommodation.ts
 // Fastify endpoints for accommodation registration and status
 import type { FastifyPluginAsync } from "fastify";
@@ -103,7 +83,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
         phone: member.phone,
         gender: member.gender,
         college,
-        groupName,
+        groupName, // Store group name for grouping
         tiqrBookingUid: childBooking.uid,
         paymentStatus: childBooking.status,
         paymentUrl: tiqrData.payment.url_to_redirect || "",
@@ -167,6 +147,21 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       name: userData.name,
       message: "Status fetched successfully",
     };
+  });
+
+  // Admin: Get all accommodation bookings (dashboard)
+  fastify.get("/accommodation/admin/all", async function (request: any, reply: any) {
+    try {
+      const snap = await db.collection("accommodation_group_members").get();
+      const members = snap.docs.map((doc: any) => doc.data());
+      return {
+        count: members.length,
+        members,
+      };
+    } catch (err) {
+      reply.status(500);
+      return { error: true, message: "Failed to fetch all accommodation bookings", details: String(err) };
+    }
   });
 };
 
