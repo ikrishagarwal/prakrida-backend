@@ -33,7 +33,8 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       };
     }
 
-    const { eventId, type, members, name, phone, college, role } = body.data;
+    const { eventId, type, members, name, phone, college, role, gender } =
+      body.data;
 
     const ticketId = EventIds[eventId];
 
@@ -81,7 +82,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
     const paymentUrl = tiqrData.payment.url_to_redirect;
 
-    const eventData: EventBooking = {
+    const eventData: EventSchema = {
       paymentUrl,
       tiqrBookingUid: tiqrData.booking.uid,
       status: PaymentStatus.PendingPayment,
@@ -89,6 +90,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       members: members ?? [],
       college,
       role,
+      gender,
       updatedAt: FieldValue.serverTimestamp() as Timestamp,
     };
 
@@ -179,7 +181,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
     }
 
     const data = userSnap.data() as {
-      events?: Record<string, EventBooking>;
+      events?: Record<string, EventSchema>;
     };
     const eventsMap = data?.events ?? {};
 
@@ -205,18 +207,20 @@ const BookEventsPayload = z.object({
         email: z.email(),
         phone: z.string().min(10),
         role: z.string(),
+        gender: z.string().length(1),
       }),
     )
     .optional(),
   name: z.string().min(1),
   phone: z.string().min(10),
   role: z.string(),
+  gender: z.string().length(1),
   college: z.string().min(1),
 });
 
-interface EventBooking extends Pick<
+interface EventSchema extends Pick<
   z.infer<typeof BookEventsPayload>,
-  "type" | "members" | "college" | "role"
+  "type" | "members" | "college" | "role" | "gender"
 > {
   tiqrBookingUid: string;
   paymentUrl?: string;
