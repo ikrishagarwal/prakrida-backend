@@ -9,16 +9,6 @@ import { PaymentStatus } from "../constants";
 import { FieldValue } from "firebase-admin/firestore";
 import z from "zod";
 
-interface EventBooking {
-  status: PaymentStatus;
-  type: "solo" | "group";
-  members?: { name: string; email: string; phone: string }[];
-  paymentUrl?: string;
-  tiqrBookingUid: string;
-  updatedAt: FirebaseFirestore.Timestamp;
-  college?: string;
-}
-
 const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
   fastify.decorateRequest("user", null);
   fastify.addHook("onRequest", async (request, reply) => {
@@ -43,7 +33,8 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       };
     }
 
-    const { eventId, type, members, name, phone, college } = body.data;
+    const { eventId, type, members, name, phone, college, role, gender } =
+      body.data;
 
     const ticketId = EventIds[eventId];
 
@@ -81,6 +72,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
         eventId,
         type,
         college,
+        role,
         members: members ?? [],
       },
     };
@@ -90,13 +82,15 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
 
     const paymentUrl = tiqrData.payment.url_to_redirect;
 
-    const eventData: EventBooking = {
+    const eventData: EventSchema = {
       paymentUrl,
       tiqrBookingUid: tiqrData.booking.uid,
       status: PaymentStatus.PendingPayment,
       type,
       members: members ?? [],
       college,
+      role,
+      gender,
       updatedAt: FieldValue.serverTimestamp() as Timestamp,
     };
 
@@ -187,7 +181,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
     }
 
     const data = userSnap.data() as {
-      events?: Record<string, EventBooking>;
+      events?: Record<string, EventSchema>;
     };
     const eventsMap = data?.events ?? {};
 
@@ -210,14 +204,28 @@ const BookEventsPayload = z.object({
     .array(
       z.object({
         name: z.string().min(1),
-        email: z.string().email(),
+        email: z.email(),
         phone: z.string().min(10),
+        role: z.string(),
+        gender: z.string().length(1),
       }),
     )
     .optional(),
   name: z.string().min(1),
   phone: z.string().min(10),
+  role: z.string(),
+  gender: z.string().length(1),
   college: z.string().min(1),
 });
+
+interface EventSchema extends Pick<
+  z.infer<typeof BookEventsPayload>,
+  "type" | "members" | "college" | "role" | "gender"
+> {
+  tiqrBookingUid: string;
+  paymentUrl?: string;
+  status: PaymentStatus;
+  updatedAt: FirebaseFirestore.Timestamp;
+}
 
 export default Event;
