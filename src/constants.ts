@@ -19,6 +19,7 @@ export enum Tickets {
   BasketballWomen = 2614,
   FreeFire = 2618,
   LawnTennis = 2619,
+  LawnTennisGroup = 2610,
   TableTennisTeamWomen = 2621,
   TableTennisWomenSolo = 2623,
   VolleyballWomen = 2612,
@@ -33,8 +34,7 @@ export enum Tickets {
   CricketWomen = 2606,
   FootballMen = 2607,
   FootballWomen = 2608,
-  ChessMen = 2609,
-  ChessWomen = 2610,
+  Chess = 2609,
   Carrom = 2625,
   Accommodation = 2626,
   Alumni = 2636,
@@ -56,8 +56,7 @@ export const EventIds: Record<number, Tickets> = {
   4: Tickets.FootballWomen, // Football: Women's
 
   // --- Chess ---
-  5: Tickets.ChessMen, // Chess: Men's
-  6: Tickets.ChessWomen, // Chess: Women's
+  5: Tickets.Chess, // Chess: Group
 
   // --- Volleyball ---
   7: Tickets.VolleyballMen, // Volleyball: Men's
@@ -79,6 +78,8 @@ export const EventIds: Record<number, Tickets> = {
   // --- Lawn-Tennis ---
   16: Tickets.LawnTennis, // Lawn-Tennis: Men's
   17: Tickets.LawnTennis, // Lawn-Tennis: Women's
+  118: Tickets.LawnTennisGroup,
+  119: Tickets.LawnTennisGroup,
 
   // --- Table Tennis ---
   18: Tickets.TableTennisTeamMen, // Table Tennis: Team Men's

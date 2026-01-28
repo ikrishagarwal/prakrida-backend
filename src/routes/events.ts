@@ -33,8 +33,17 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       };
     }
 
-    const { eventId, type, members, name, phone, college, role, gender } =
-      body.data;
+    const {
+      eventId,
+      type,
+      members,
+      name,
+      phone,
+      college,
+      role,
+      gender,
+      teamName,
+    } = body.data;
 
     const ticketId = EventIds[eventId];
 
@@ -90,6 +99,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       members: members ?? [],
       college,
       role,
+      teamName,
       gender,
       updatedAt: FieldValue.serverTimestamp() as Timestamp,
     };
@@ -215,12 +225,13 @@ const BookEventsPayload = z.object({
   phone: z.string().min(10),
   role: z.string(),
   gender: z.string().length(1),
+  teamName: z.string().min(3),
   college: z.string().min(1),
 });
 
 interface EventSchema extends Pick<
   z.infer<typeof BookEventsPayload>,
-  "type" | "members" | "college" | "role" | "gender"
+  "type" | "members" | "college" | "role" | "gender" | "teamName"
 > {
   tiqrBookingUid: string;
   paymentUrl?: string;
