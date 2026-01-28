@@ -37,11 +37,13 @@ export enum Tickets {
   ChessWomen = 2610,
   Carrom = 2625,
   Accommodation = 2626,
+  Alumni = 2636,
 }
 
 // It's for mapping the events with their collection names in Firestore
 export const EventMappings: Record<number, string> = {
   [Tickets.Accommodation]: "accommodation",
+  [Tickets.Alumni]: "alumni",
 };
 
 export const EventIds: Record<number, Tickets> = {

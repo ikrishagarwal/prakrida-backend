@@ -99,6 +99,20 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
         }
         reply.status(204).send();
         return;
+
+      case Tickets.Alumni:
+        const alumni = db
+          .collection(collectionName)
+          .where("tiqrBookingUid", "==", body.booking_uid);
+        const alumniSnap = await alumni.get();
+        if (!alumniSnap.empty) {
+          await alumniSnap.docs[0].ref.update({
+            paymentStatus: body.booking_status,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        reply.status(204).send();
+        return;
     }
 
     if (EventTicketIds.includes(ticketId)) {
