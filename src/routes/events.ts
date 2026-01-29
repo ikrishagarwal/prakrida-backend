@@ -57,6 +57,12 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
         .send({ error: "Group events require members list" });
     }
 
+    if (type === "group" && !teamName) {
+      return reply
+        .code(400)
+        .send({ error: "Team name is required for groups" });
+    }
+
     const userRef = db.collection("events_registrations").doc(user.uid);
 
     const docSnap = await userRef.get();
@@ -99,7 +105,7 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       members: members ?? [],
       college,
       role,
-      teamName,
+      teamName: type === "group" ? teamName : undefined,
       gender,
       updatedAt: FieldValue.serverTimestamp() as Timestamp,
     };
@@ -225,7 +231,7 @@ const BookEventsPayload = z.object({
   phone: z.string().min(10),
   role: z.string(),
   gender: z.string().length(1),
-  teamName: z.string().min(3),
+  teamName: z.string().min(3).optional(),
   college: z.string().min(1),
 });
 
