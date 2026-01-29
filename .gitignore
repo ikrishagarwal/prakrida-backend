@@ -19,8 +19,8 @@ node_modules
 # compiled app
 dist
 
+
 # sensitive files
 .env
 serviceAccountKey.json
-
 *.csv
