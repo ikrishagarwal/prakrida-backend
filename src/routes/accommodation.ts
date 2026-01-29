@@ -1,5 +1,4 @@
 // accommodation.ts
-// Fastify endpoints for accommodation registration and status
 import type { FastifyPluginAsync } from "fastify";
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
@@ -7,24 +6,14 @@ import z from "zod";
 import { PaymentStatus, Tickets } from "../constants";
 import { validateAuthToken } from "../lib/auth";
 import { db } from "../lib/firebase";
-import TiQR, { FetchBookingResponse, BulkBookingResponse } from "../lib/tiqr";
+import TiQR, { BulkBookingResponse, FetchBookingResponse } from "../lib/tiqr";
 
-const AccommodationGroupBookingPayload = z.object({
-  college: z.string().min(1),
-  groupName: z.string().min(1, 'Group name is required'),
-  preferences: z.string().optional(),
-  members: z.array(
-    z.object({
-      name: z.string().min(1),
-      email: z.string().email(),
-      phone: z.string().min(10),
-      gender: z.enum(["male", "female", "other"]),
-    })
-  ).min(1),
-});
+const ACCOMMODATION_COLLECTION = "accommodation_registrations";
 
 const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
+  
+  // Auth Hook
   fastify.addHook("onRequest", async (request, reply) => {
     const user = await validateAuthToken(request).catch(() => null);
     if (!user) {
@@ -36,8 +25,11 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
     request.setDecorator("user", user);
   });
 
+  // POST: Book Group Accommodation (Bulk Members, Individual Entries)
   fastify.post("/accommodation/book", async function (request, reply) {
-    const body = AccommodationGroupBookingPayload.safeParse(request.body);
+    const user = request.getDecorator<DecodedIdToken>("user");
+    const body = AccommodationGroupPayload.safeParse(request.body);
+
     if (!body.success) {
       reply.status(400);
       return {
@@ -46,137 +38,177 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
         details: z.prettifyError(body.error),
       };
     }
-    const { members, college, groupName } = body.data;
-    if (!Array.isArray(members) || members.length === 0) {
-      reply.status(400);
-      return {
-        error: true,
-        message: "At least one member is required",
-      };
-    }
-    // Create bulk booking payload
-    const bookings = members.map((member, i) => ({
+
+    const { members, college, teamName, preferences } = body.data;
+
+    // 1. Prepare TiQR Bulk Payload
+    const bookings = members.map((member, index) => ({
       first_name: member.name.split(" ")[0],
-      last_name: member.name.split(" ").slice(1).join(" "),
+      last_name: member.name.split(" ").slice(1).join(" ") || "Member",
       phone_number: member.phone,
       email: member.email,
       ticket: Tickets.Accommodation,
       meta_data: {
         gender: member.gender,
         college,
-        groupName,
-        index: i,
+        teamName,
+        index,
       },
     }));
+
+    // 2. Call TiQR Bulk Booking
     const tiqrResponse = await TiQR.createBulkBooking({ bookings });
     const tiqrData = (await tiqrResponse.json()) as BulkBookingResponse;
 
-    // Store booking/payment info for each member in Firestore
+    const groupId = tiqrData.booking.uid; // Parent UID for linking
+    const paymentUrl = tiqrData.payment.url_to_redirect;
+
+    // 3. Batch write to Firestore (1-1 entry per member)
     const batch = db.batch();
-    (tiqrData.booking.child_bookings as Array<any>).forEach((childBooking: any, i: number) => {
+
+    tiqrData.booking.child_bookings.forEach((child: any, i: number) => {
       const member = members[i];
-      if (!member) return;
-      const docRef = db.collection("accommodation_group_members").doc(childBooking.uid);
+      const docRef = db.collection(ACCOMMODATION_COLLECTION).doc(child.uid);
+      
       batch.set(docRef, {
+        ownerUID: user.uid, // The leader who booked
         name: member.name,
         email: member.email,
         phone: member.phone,
         gender: member.gender,
         college,
-        groupName, // Store group name for grouping
-        tiqrBookingUid: childBooking.uid,
-        paymentStatus: childBooking.status,
-        paymentUrl: tiqrData.payment.url_to_redirect || "",
+        teamName,
+        groupId, // Common for all team members
+        tiqrBookingUid: child.uid,
+        paymentStatus: child.status as PaymentStatus,
+        paymentUrl: paymentUrl || "",
+        preferences: preferences || "",
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
     });
+
     await batch.commit();
 
+    reply.code(200);
     return {
       success: true,
-      groupName,
-      message: `Booked accommodation for ${members.length} members successfully`,
-      paymentUrl: tiqrData.payment.url_to_redirect,
-      bookingUids: (tiqrData.booking.child_bookings as Array<any>).map((b: any) => b.uid),
+      message: `Successfully initiated booking for ${members.length} members`,
+      groupId,
+      paymentUrl,
     };
   });
 
-  fastify.get("/accommodation/status", async function (request, reply) {
+  // GET: Sync and fetch individual member status (Mirrors /merch/order/:id)
+  fastify.get("/accommodation/order/:id", async function (request, reply) {
     const user = request.getDecorator<DecodedIdToken>("user");
-    const userSnap = await db.collection("accommodation").doc(user.uid).get();
-    if (!userSnap.exists) {
-      reply.code(404);
-      return {
-        error: true,
-        message: "No registration found for this user",
-      };
+    const params = request.params as { id?: string };
+    const id = (params?.id || "").trim();
+
+    if (!id) {
+      reply.code(400);
+      return { error: true, message: "Missing booking id" };
     }
-    const userData = userSnap.data() as AccommodationSchema;
-    if (!userData.tiqrBookingUid) {
+
+    const docRef = db.collection(ACCOMMODATION_COLLECTION).doc(id);
+    const snap = await docRef.get();
+
+    if (!snap.exists) {
       reply.code(404);
-      return {
-        error: true,
-        message: "No booking found for this event",
-      };
+      return { error: true, message: "Booking entry not found" };
     }
-    if (userData.paymentStatus === PaymentStatus.Confirmed) {
-      reply.code(200);
+
+    const order = snap.data() as AccommodationSchema;
+
+    // Sync if not confirmed
+    if (order.paymentStatus !== PaymentStatus.Confirmed) {
+      const tiqrResponse = await TiQR.fetchBooking(id);
+      const tiqrData = (await tiqrResponse.json()) as FetchBookingResponse;
+
+      if (tiqrData.status && tiqrData.status !== order.paymentStatus) {
+        await docRef.update({
+          paymentStatus: tiqrData.status,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        order.paymentStatus = tiqrData.status as PaymentStatus;
+      }
+    }
+
+    return {
+      success: true,
+      bookingId: id,
+      status: order.paymentStatus,
+      paymentUrl: order.paymentUrl,
+      details: {
+        name: order.name,
+        teamName: order.teamName,
+        ownerUID: order.ownerUID,
+      }
+    };
+  });
+
+  // ADMIN: Dashboard View (Grouped by groupId/teamName)
+  fastify.get("/accommodation/admin/all", async function (request, reply) {
+    try {
+      request.getDecorator<DecodedIdToken>("user");
+      const snap = await db.collection(ACCOMMODATION_COLLECTION).get();
+      const allEntries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      const teams = allEntries.reduce((acc: any, curr: any) => {
+        const key = curr.groupId || "Individual";
+        if (!acc[key]) {
+          acc[key] = { 
+            teamName: curr.teamName, 
+            ownerUID: curr.ownerUID,
+            count: 0, 
+            members: [] 
+          };
+        }
+        acc[key].members.push(curr);
+        acc[key].count++;
+        return acc;
+      }, {});
+
       return {
         success: true,
-        phone: userData.phone,
-        college: userData.college,
-        name: userData.name,
-        status: PaymentStatus.Confirmed,
-        message: "Registration confirmed",
-      };
-    }
-    const tiqrResponse = await TiQR.fetchBooking(userData.tiqrBookingUid);
-    const tiqrData = (await tiqrResponse.json()) as FetchBookingResponse;
-    if (tiqrData.status && tiqrData.status !== userData.paymentStatus) {
-      await userSnap.ref.update({
-        paymentStatus: tiqrData.status,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-    return {
-      success: true,
-      status: tiqrData.status,
-      phone: userData.phone,
-      college: userData.college,
-      name: userData.name,
-      message: "Status fetched successfully",
-    };
-  });
-
-  // Admin: Get all accommodation bookings (dashboard)
-  fastify.get("/accommodation/admin/all", async function (request: any, reply: any) {
-    try {
-      const snap = await db.collection("accommodation_group_members").get();
-      const members = snap.docs.map((doc: any) => doc.data());
-      return {
-        count: members.length,
-        members,
+        total_registrations: allEntries.length,
+        teams,
       };
     } catch (err) {
       reply.status(500);
-      return { error: true, message: "Failed to fetch all accommodation bookings", details: String(err) };
+      return { error: true, message: "Failed to fetch admin dashboard", details: String(err) };
     }
   });
 };
 
-// Only keep the correct interface (with groupName)
+// Zod Validation
+const AccommodationGroupPayload = z.object({
+  college: z.string().min(1),
+  teamName: z.string().min(1),
+  preferences: z.string().optional(),
+  members: z.array(z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+    phone: z.string().min(10),
+    gender: z.enum(["male", "female", "other"]),
+  })).min(1),
+});
+
+// Interface for Firestore
 interface AccommodationSchema extends Record<string, any> {
+  ownerUID: string;
   name: string;
   email: string;
   phone: string;
+  gender: string;
   college: string;
-  groupName: string;
-  preferences?: string;
-  tiqrBookingUid?: string;
-  paymentStatus?: PaymentStatus;
-  createdAt: FirebaseFirestore.FieldValue;
-  updatedAt: FirebaseFirestore.FieldValue;
+  teamName: string;
+  groupId: string;
+  tiqrBookingUid: string;
+  paymentStatus: PaymentStatus | string;
+  paymentUrl: string;
+  createdAt: FieldValue | FirebaseFirestore.Timestamp;
+  updatedAt: FieldValue | FirebaseFirestore.Timestamp;
 }
 
 export default Accommodation;
