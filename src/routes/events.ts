@@ -105,10 +105,13 @@ const Event: FastifyPluginAsync = async (fastify): Promise<any> => {
       members: members ?? [],
       college,
       role,
-      teamName: type === "group" ? teamName : undefined,
       gender,
       updatedAt: FieldValue.serverTimestamp() as Timestamp,
     };
+
+    if (type === "group") {
+      eventData.teamName = teamName!;
+    }
 
     if (!docSnap.exists) {
       await userRef.set({
