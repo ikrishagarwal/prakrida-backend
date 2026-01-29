@@ -13,7 +13,6 @@ const ACCOMMODATION_COLLECTION = EventMappings[Tickets.Accommodation];
 const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
   
-  // Auth Hook
   fastify.addHook("onRequest", async (request, reply) => {
     const user = await validateAuthToken(request).catch(() => null);
     if (!user) {
@@ -25,7 +24,6 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
     request.setDecorator("user", user);
   });
 
-  // POST: Book Group Accommodation (Single Group Document)
   fastify.post("/accommodation/book", async function (request, reply) {
     const user = request.getDecorator<DecodedIdToken>("user");
     const body = AccommodationGroupPayload.safeParse(request.body);
@@ -41,7 +39,6 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
 
     const { members, college, teamName, preferences, eventId } = body.data;
 
-    // 1. Prepare TiQR Bulk Payload
     const bookings = members.map((member, index) => ({
       first_name: member.name.split(" ")[0],
       last_name: member.name.split(" ").slice(1).join(" ") || "Member",
@@ -56,21 +53,19 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       },
     }));
 
-    // 2. Call TiQR Bulk Booking
     const tiqrResponse = await TiQR.createBulkBooking({ bookings });
     const tiqrData = (await tiqrResponse.json()) as BulkBookingResponse;
 
-    const groupId = tiqrData.booking.uid; // Parent UID for linking
+    const groupId = tiqrData.booking.uid;
     const paymentUrl = tiqrData.payment.url_to_redirect;
 
-    // 3. Save Single Group Document to Firestore
     const docRef = db.collection(ACCOMMODATION_COLLECTION).doc(groupId);
 
     await docRef.set({
       ownerUID: user.uid,
       eventId,
       college,
-      teamName, // Validated manually if needed or assumed unique by usage
+      teamName,
       paymentUrl: paymentUrl || "",
       paymentStatus: (tiqrData.booking.status as PaymentStatus) || PaymentStatus.PendingPayment,
       preferences: preferences || "",
@@ -87,8 +82,6 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       paymentUrl,
     };
   });
-
-  // GET: Sync and fetch group booking status
   fastify.get("/accommodation/order/:id", async function (request, reply) {
     const params = request.params as { id?: string };
     const id = (params?.id || "").trim();
@@ -108,22 +101,16 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
 
     const groupOrder = snap.data() as AccommodationGroupSchema;
 
-    // Sync if not confirmed
     if (groupOrder.paymentStatus !== PaymentStatus.Confirmed) {
-      // Fetch status using the Group ID (Parent Booking)
       const tiqrResponse = await TiQR.fetchBooking(id);
       const tiqrData = (await tiqrResponse.json()) as FetchBookingResponse;
 
       if (tiqrData.status && tiqrData.status !== groupOrder.paymentStatus) {
-         // Update root status
         await docRef.update({
           paymentStatus: tiqrData.status,
           updatedAt: FieldValue.serverTimestamp(),
         });
         groupOrder.paymentStatus = tiqrData.status as PaymentStatus;
-        
-        // Optionally update member statuses if TiQR provides them in fetch payload (TiQR specific)
-        // For now, updating the main group status is the primary requirement for unlocking access.
       }
     }
 
@@ -136,11 +123,9 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
     };
   });
 
-  // GET: Fetch All Group Bookings (User's History)
   fastify.get("/accommodation/all", async function (request, reply) {
     try {
       const user = request.getDecorator<DecodedIdToken>("user");
-      // Filter by ownerUID to show only the user's bookings
       const snap = await db.collection(ACCOMMODATION_COLLECTION)
         .where("ownerUID", "==", user.uid)
         .get();
@@ -159,7 +144,6 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   });
 };
 
-// Zod Validation
 const AccommodationGroupPayload = z.object({
   eventId: z.coerce.number().int().positive(),
   college: z.string().min(1),
