@@ -3,12 +3,12 @@ import type { FastifyPluginAsync } from "fastify";
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import z from "zod";
-import { PaymentStatus, Tickets } from "../constants";
+import { EventMappings, PaymentStatus, Tickets } from "../constants";
 import { validateAuthToken } from "../lib/auth";
 import { db } from "../lib/firebase";
 import TiQR, { BulkBookingResponse, FetchBookingResponse } from "../lib/tiqr";
 
-const ACCOMMODATION_COLLECTION = "accommodation_registrations";
+const ACCOMMODATION_COLLECTION = EventMappings[Tickets.Accommodation];
 
 const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
@@ -25,7 +25,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
     request.setDecorator("user", user);
   });
 
-  // POST: Book Group Accommodation (Bulk Members, Individual Entries)
+  // POST: Book Group Accommodation (Single Group Document)
   fastify.post("/accommodation/book", async function (request, reply) {
     const user = request.getDecorator<DecodedIdToken>("user");
     const body = AccommodationGroupPayload.safeParse(request.body);
@@ -39,7 +39,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       };
     }
 
-    const { members, college, teamName, preferences } = body.data;
+    const { members, college, teamName, preferences, eventId } = body.data;
 
     // 1. Prepare TiQR Bulk Payload
     const bookings = members.map((member, index) => ({
@@ -63,32 +63,21 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
     const groupId = tiqrData.booking.uid; // Parent UID for linking
     const paymentUrl = tiqrData.payment.url_to_redirect;
 
-    // 3. Batch write to Firestore (1-1 entry per member)
-    const batch = db.batch();
+    // 3. Save Single Group Document to Firestore
+    const docRef = db.collection(ACCOMMODATION_COLLECTION).doc(groupId);
 
-    tiqrData.booking.child_bookings.forEach((child: any, i: number) => {
-      const member = members[i];
-      const docRef = db.collection(ACCOMMODATION_COLLECTION).doc(child.uid);
-      
-      batch.set(docRef, {
-        ownerUID: user.uid, // The leader who booked
-        name: member.name,
-        email: member.email,
-        phone: member.phone,
-        gender: member.gender,
-        college,
-        teamName,
-        groupId, // Common for all team members
-        tiqrBookingUid: child.uid,
-        paymentStatus: child.status as PaymentStatus,
-        paymentUrl: paymentUrl || "",
-        preferences: preferences || "",
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+    await docRef.set({
+      ownerUID: user.uid,
+      eventId,
+      college,
+      teamName, // Validated manually if needed or assumed unique by usage
+      paymentUrl: paymentUrl || "",
+      paymentStatus: (tiqrData.booking.status as PaymentStatus) || PaymentStatus.PendingPayment,
+      preferences: preferences || "",
+      members,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
-
-    await batch.commit();
 
     reply.code(200);
     return {
@@ -99,9 +88,8 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
     };
   });
 
-  // GET: Sync and fetch individual member status (Mirrors /merch/order/:id)
+  // GET: Sync and fetch group booking status
   fastify.get("/accommodation/order/:id", async function (request, reply) {
-    const user = request.getDecorator<DecodedIdToken>("user");
     const params = request.params as { id?: string };
     const id = (params?.id || "").trim();
 
@@ -118,71 +106,62 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       return { error: true, message: "Booking entry not found" };
     }
 
-    const order = snap.data() as AccommodationSchema;
+    const groupOrder = snap.data() as AccommodationGroupSchema;
 
     // Sync if not confirmed
-    if (order.paymentStatus !== PaymentStatus.Confirmed) {
+    if (groupOrder.paymentStatus !== PaymentStatus.Confirmed) {
+      // Fetch status using the Group ID (Parent Booking)
       const tiqrResponse = await TiQR.fetchBooking(id);
       const tiqrData = (await tiqrResponse.json()) as FetchBookingResponse;
 
-      if (tiqrData.status && tiqrData.status !== order.paymentStatus) {
+      if (tiqrData.status && tiqrData.status !== groupOrder.paymentStatus) {
+         // Update root status
         await docRef.update({
           paymentStatus: tiqrData.status,
           updatedAt: FieldValue.serverTimestamp(),
         });
-        order.paymentStatus = tiqrData.status as PaymentStatus;
+        groupOrder.paymentStatus = tiqrData.status as PaymentStatus;
+        
+        // Optionally update member statuses if TiQR provides them in fetch payload (TiQR specific)
+        // For now, updating the main group status is the primary requirement for unlocking access.
       }
     }
 
     return {
       success: true,
       bookingId: id,
-      status: order.paymentStatus,
-      paymentUrl: order.paymentUrl,
-      details: {
-        name: order.name,
-        teamName: order.teamName,
-        ownerUID: order.ownerUID,
-      }
+      status: groupOrder.paymentStatus,
+      paymentUrl: groupOrder.paymentUrl,
+      details: groupOrder
     };
   });
 
-  // ADMIN: Dashboard View (Grouped by groupId/teamName)
-  fastify.get("/accommodation/admin/all", async function (request, reply) {
+  // GET: Fetch All Group Bookings (User's History)
+  fastify.get("/accommodation/all", async function (request, reply) {
     try {
-      request.getDecorator<DecodedIdToken>("user");
-      const snap = await db.collection(ACCOMMODATION_COLLECTION).get();
-      const allEntries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const user = request.getDecorator<DecodedIdToken>("user");
+      // Filter by ownerUID to show only the user's bookings
+      const snap = await db.collection(ACCOMMODATION_COLLECTION)
+        .where("ownerUID", "==", user.uid)
+        .get();
 
-      const teams = allEntries.reduce((acc: any, curr: any) => {
-        const key = curr.groupId || "Individual";
-        if (!acc[key]) {
-          acc[key] = { 
-            teamName: curr.teamName, 
-            ownerUID: curr.ownerUID,
-            count: 0, 
-            members: [] 
-          };
-        }
-        acc[key].members.push(curr);
-        acc[key].count++;
-        return acc;
-      }, {});
+      const allGroups = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       return {
         success: true,
-        total_registrations: allEntries.length,
-        teams,
+        total_groups: allGroups.length,
+        bookings: allGroups,
       };
     } catch (err) {
       reply.status(500);
-      return { error: true, message: "Failed to fetch admin dashboard", details: String(err) };
+      return { error: true, message: "Failed to fetch accommodation bookings", details: String(err) };
     }
   });
 };
 
 // Zod Validation
 const AccommodationGroupPayload = z.object({
+  eventId: z.coerce.number().int().positive(),
   college: z.string().min(1),
   teamName: z.string().min(1),
   preferences: z.string().optional(),
@@ -194,19 +173,23 @@ const AccommodationGroupPayload = z.object({
   })).min(1),
 });
 
-// Interface for Firestore
-interface AccommodationSchema extends Record<string, any> {
+// Interface for Firestore (Group Schema)
+interface AccommodationGroupSchema extends Record<string, any> {
   ownerUID: string;
-  name: string;
-  email: string;
-  phone: string;
-  gender: string;
+  eventId: number;
   college: string;
   teamName: string;
-  groupId: string;
-  tiqrBookingUid: string;
-  paymentStatus: PaymentStatus | string;
   paymentUrl: string;
+  paymentStatus: PaymentStatus | string;
+  preferences: string;
+  members: Array<{
+    tiqrBookingUid: string;
+    name: string;
+    email: string;
+    phone: string;
+    gender: string;
+    status: PaymentStatus;
+  }>;
   createdAt: FieldValue | FirebaseFirestore.Timestamp;
   updatedAt: FieldValue | FirebaseFirestore.Timestamp;
 }

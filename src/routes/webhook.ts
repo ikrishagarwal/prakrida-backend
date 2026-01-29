@@ -89,10 +89,10 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
       case Tickets.Accommodation:
         const ref = db
           .collection(collectionName)
-          .where("tiqrBookingUid", "==", body.booking_uid);
+          .doc(body.booking_uid);
         const snap = await ref.get();
-        if (!snap.empty) {
-          await snap.docs[0].ref.update({
+        if (snap.exists) {
+          await snap.ref.update({
             paymentStatus: body.booking_status,
             updatedAt: FieldValue.serverTimestamp(),
           });
