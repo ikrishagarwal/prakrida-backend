@@ -153,7 +153,7 @@ const AccommodationGroupPayload = z.object({
     name: z.string().min(1),
     email: z.string().email(),
     phone: z.string().min(10),
-    gender: z.enum(["male", "female", "other"]),
+    gender: z.enum(["M", "F"]),
   })).min(1),
 });
 
