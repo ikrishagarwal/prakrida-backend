@@ -37,7 +37,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       };
     }
 
-    const { members, college, teamName, preferences, eventId } = body.data;
+    const { members, college } = body.data;
 
     const bookings = members.map((member, index) => ({
       first_name: member.name.split(" ")[0],
@@ -48,7 +48,6 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       meta_data: {
         gender: member.gender,
         college,
-        teamName,
         index,
       },
     }));
@@ -63,12 +62,9 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
 
     await docRef.set({
       ownerUID: user.uid,
-      eventId,
       college,
-      teamName,
       paymentUrl: paymentUrl || "",
       paymentStatus: (tiqrData.booking.status as PaymentStatus) || PaymentStatus.PendingPayment,
-      preferences: preferences || "",
       members,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -82,6 +78,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
       paymentUrl,
     };
   });
+
   fastify.get("/accommodation/order/:id", async function (request, reply) {
     const params = request.params as { id?: string };
     const id = (params?.id || "").trim();
@@ -145,10 +142,7 @@ const Accommodation: FastifyPluginAsync = async (fastify): Promise<void> => {
 };
 
 const AccommodationGroupPayload = z.object({
-  eventId: z.coerce.number().int().positive(),
   college: z.string().min(1),
-  teamName: z.string().min(1),
-  preferences: z.string().optional(),
   members: z.array(z.object({
     name: z.string().min(1),
     email: z.string().email(),
@@ -157,15 +151,11 @@ const AccommodationGroupPayload = z.object({
   })).min(1),
 });
 
-// Interface for Firestore (Group Schema)
 interface AccommodationGroupSchema extends Record<string, any> {
   ownerUID: string;
-  eventId: number;
   college: string;
-  teamName: string;
   paymentUrl: string;
   paymentStatus: PaymentStatus | string;
-  preferences: string;
   members: Array<{
     tiqrBookingUid: string;
     name: string;
