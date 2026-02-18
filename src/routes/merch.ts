@@ -2,19 +2,10 @@ import { FastifyPluginAsync } from "fastify";
 import { DecodedIdToken } from "firebase-admin/auth";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import z from "zod";
-import { PaymentStatus } from "../constants"; // reuse same Tickets enum
+import { PaymentStatus, PRAKRIDA_MERCH_COLLECTION, Tickets } from "../constants";
 import { validateAuthToken } from "../lib/auth";
 import { db } from "../lib/firebase";
 import TiQR, { BookingResponse, FetchBookingResponse } from "../lib/tiqr";
-
-const PRAKRIDA_MERCH_COLLECTION = "prakrida_merchandise";
-
-// Prakrida merchandise ticket IDs from JusPay
-const PrakridaTickets = {
-  Single: 2668,      // Single merch ticket
-  ComboTwo: 2669,    // Combo of 2 tees ticket
-  ComboThree: 2670,  // Combo of 3 tees ticket
-};
 
 const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
@@ -32,7 +23,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
     request.setDecorator("user", user);
   });
 
-  fastify.post("/prakrida/merch/order", async function (request, reply) {
+  fastify.post("/merch/order", async function (request, reply) {
     const user = request.getDecorator<DecodedIdToken>("user");
     const body = PrakridaMerchOrderPayload.safeParse(request.body);
 
@@ -46,7 +37,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
     }
 
     // SECURITY: Cannot order more than 3 items total
-    if (body.data.item.quantity > 3) {
+    if (body.data.items.length > 3) {
       reply.code(400);
       return {
         error: true,
@@ -54,24 +45,22 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       };
     }
 
-    let ticketId: number; // ← explicitly number, like Technika
+    // Determine ticket ID based on number of items
+    let ticketId: number;
+    const itemCount = body.data.items.length;
 
-    switch (body.data.item.type) {
-      case "single":
-        ticketId = PrakridaTickets.Single;
-        break;
-      case "combo_two":
-        ticketId = PrakridaTickets.ComboTwo;
-        break;
-      case "combo_three":
-        ticketId = PrakridaTickets.ComboThree;
-        break;
-      default:
-        reply.code(400);
-        return {
-          error: true,
-          message: "Invalid merch item type",
-        };
+    if (itemCount === 1) {
+      ticketId = Tickets.MerchSingle;
+    } else if (itemCount === 2) {
+      ticketId = Tickets.MerchComboTwo;
+    } else if (itemCount === 3) {
+      ticketId = Tickets.MerchComboThree;
+    } else {
+      reply.code(400);
+      return {
+        error: true,
+        message: "Invalid number of items",
+      };
     }
 
     const [firstName, ...restName] = body.data.name.trim().split(/s+/);
@@ -81,11 +70,11 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       last_name: restName.join(" "),
       phone_number: body.data.phone,
       email: user.email!,
-      ticket: ticketId, // ← now number, TypeScript happy
-      quantity: body.data.item.quantity,
+      ticket: ticketId,
+      quantity: body.data.items.length,
       meta_data: {
         merch: {
-          items: body.data.item,
+          items: body.data.items,
         },
       },
     });
@@ -101,7 +90,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       name: body.data.name,
       phone: body.data.phone,
       college: body.data.college,
-      item: body.data.item,
+      items: body.data.items,
       tiqrBookingUid: orderId,
       paymentStatus: tiqrData.booking.status as PaymentStatus,
       paymentUrl: tiqrData.payment.url_to_redirect || "",
@@ -120,7 +109,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
     };
   });
 
-  fastify.get("/prakrida/merch/orders", async function (request, reply) {
+  fastify.get("/merch/orders", async function (request, reply) {
     const user = request.getDecorator<DecodedIdToken>("user");
 
     const ordersSnap = await db
@@ -133,7 +122,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
 
       return {
         id: doc.id,
-        item: order.item,
+        items: order.items,
         paymentStatus: order.paymentStatus,
         paymentUrl: order.paymentUrl,
       };
@@ -143,7 +132,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
     return { success: true, orders };
   });
 
-  fastify.get("/prakrida/merch/order/:id", async function (request, reply) {
+  fastify.get("/merch/order/:id", async function (request, reply) {
     const user = request.getDecorator<DecodedIdToken>("user");
     const params = request.params as { id?: string };
     const id = (params?.id || "").trim();
@@ -172,7 +161,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       reply.code(200);
       return {
         success: true,
-        item: order.item,
+        items: order.items,
         orderId: id,
         status: PaymentStatus.Confirmed,
         paymentUrl: order.paymentUrl,
@@ -195,7 +184,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       orderId: id,
       status: tiqrData.status,
       paymentUrl: order.paymentUrl,
-      item: order.item,
+      items: order.items,
       checksum:
         tiqrData.status === PaymentStatus.Confirmed ? tiqrData.checksum : null,
     };
@@ -203,17 +192,15 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
 };
 
 const PrakridaMerchItemPayload = z.object({
-  type: z.enum(["single", "combo_two", "combo_three"]),
-  quantity: z.number().int().min(1).max(3), // Zod enforces max 3
+  color: z.enum(["white", "black", "beige"]),
   size: z.string().min(1),
-  tShirtSize: z.string().min(1).optional(),
 });
 
 const PrakridaMerchOrderPayload = z.object({
   name: z.string().min(1),
   phone: z.string().min(10),
   college: z.string().min(1),
-  item: PrakridaMerchItemPayload,
+  items: z.array(PrakridaMerchItemPayload),
 });
 
 interface PrakridaMerchOrderDocument extends Record<string, any> {
@@ -222,7 +209,7 @@ interface PrakridaMerchOrderDocument extends Record<string, any> {
   email: string;
   phone: string;
   college: string;
-  item: { type: string; quantity: number; size?: string; tShirtSize?: string };
+  items: Array<{ color: string; size: string }>;
   tiqrBookingUid: string;
   paymentStatus: PaymentStatus | string;
   paymentUrl: string;
