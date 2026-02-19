@@ -113,6 +113,33 @@ const Webhook: FastifyPluginAsync = async (fastify): Promise<void> => {
         }
         reply.status(204).send();
         return;
+
+      // Handle Prakrida Merchandise orders
+      case Tickets.MerchSingle:
+      case Tickets.MerchComboTwo:
+      case Tickets.MerchComboThree:
+        const merchRef = db
+          .collection("prakrida_merchandise")
+          .doc(body.booking_uid);
+        const merchSnap = await merchRef.get();
+        if (merchSnap.exists) {
+          await merchRef.update({
+            paymentStatus: body.booking_status,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          fastify.log.info({
+            msg: "Updated merch order payment status",
+            orderId: body.booking_uid,
+            status: body.booking_status,
+          });
+        } else {
+          fastify.log.warn({
+            msg: "Merch order not found",
+            orderId: body.booking_uid,
+          });
+        }
+        reply.status(204).send();
+        return;
     }
 
     if (EventTicketIds.includes(ticketId)) {
