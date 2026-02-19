@@ -38,7 +38,14 @@ export enum Tickets {
   Carrom = 2625,
   Accommodation = 2626,
   Alumni = 2636,
+  // Prakrida Merchandise
+  MerchSingle = 2668,
+  MerchComboTwo = 2669,
+  MerchComboThree = 2670,
 }
+
+// Prakrida Merchandise collection name
+export const PRAKRIDA_MERCH_COLLECTION = "prakrida_merchandise";
 
 // It's for mapping the events with their collection names in Firestore
 export const EventMappings: Record<number, string> = {
