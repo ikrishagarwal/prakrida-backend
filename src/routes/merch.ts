@@ -5,7 +5,7 @@ import z from "zod";
 import { PaymentStatus, PRAKRIDA_MERCH_COLLECTION, Tickets } from "../constants";
 import { validateAuthToken } from "../lib/auth";
 import { db } from "../lib/firebase";
-import TiQR, { BookingResponse, FetchBookingResponse } from "../lib/tiqr";
+import TiQR, { BookingResponse, BulkBookingResponse, FetchBookingResponse } from "../lib/tiqr";
 
 const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
   fastify.decorateRequest("user", null);
@@ -56,6 +56,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
     } else if (itemCount === 3) {
       ticketId = Tickets.MerchComboThree;
     } else {
+      // This should never happen due to initial validation, but keeping for safety
       reply.code(400);
       return {
         error: true,
@@ -63,7 +64,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       };
     }
 
-    const [firstName, ...restName] = body.data.name.trim().split(/s+/);
+    const [firstName, ...restName] = body.data.name.trim().split(/\s+/);
 
     const tiqrResponse = await TiQR.createBooking({
       first_name: firstName,
@@ -71,7 +72,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       phone_number: body.data.phone,
       email: user.email!,
       ticket: ticketId,
-      quantity: body.data.items.length,
+      quantity: 1,
       meta_data: {
         merch: {
           items: body.data.items,
@@ -79,10 +80,32 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       },
     });
 
-    const tiqrData = (await tiqrResponse.json()) as BookingResponse;
+    const tiqrData = (await tiqrResponse.json()) as BookingResponse | BulkBookingResponse;
     fastify.log.info(tiqrData);
 
-    const orderId = tiqrData.booking.uid;
+    // Handle both single and bulk booking response types
+    let orderId: string;
+    let paymentStatus: string;
+    let paymentUrl: string;
+
+    // Check if this is a bulk response (for combo orders with 2+ items)
+    if ('booking' in tiqrData && 'uid' in tiqrData.booking && 'child_bookings' in tiqrData.booking) {
+      // Bulk booking response
+      orderId = tiqrData.booking.uid;
+      paymentStatus = tiqrData.booking.status;
+      paymentUrl = tiqrData.payment.url_to_redirect || "";
+    } else if ('booking' in tiqrData && 'uid' in tiqrData.booking) {
+      // Single booking response
+      orderId = tiqrData.booking.uid;
+      paymentStatus = tiqrData.booking.status;
+      paymentUrl = tiqrData.payment.url_to_redirect || "";
+    } else {
+      reply.code(500);
+      return {
+        error: true,
+        message: "Unexpected TiQR response format",
+      };
+    }
 
     const orderDoc: PrakridaMerchOrderDocument = {
       userId: user.uid,
@@ -92,8 +115,8 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       college: body.data.college,
       items: body.data.items,
       tiqrBookingUid: orderId,
-      paymentStatus: tiqrData.booking.status as PaymentStatus,
-      paymentUrl: tiqrData.payment.url_to_redirect || "",
+      paymentStatus: paymentStatus as PaymentStatus,
+      paymentUrl: paymentUrl,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     };
