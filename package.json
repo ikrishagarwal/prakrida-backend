@@ -7,7 +7,8 @@
     "build": "tsc",
     "watch": "tsc -w",
     "dev": "tsx watch src/server.ts",
-    "start": "node --enable-source-maps dist/server.js"
+    "start": "node --enable-source-maps dist/server.js",
+    "export": "tsx src/export-cli.ts"
   },
   "keywords": [],
   "author": "Krish",

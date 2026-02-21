@@ -2,7 +2,11 @@ import { FastifyPluginAsync } from "fastify";
 import { DecodedIdToken } from "firebase-admin/auth";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import z from "zod";
-import { PaymentStatus, PRAKRIDA_MERCH_COLLECTION, Tickets } from "../constants";
+import {
+  PaymentStatus,
+  PRAKRIDA_MERCH_COLLECTION,
+  Tickets,
+} from "../constants";
 import { validateAuthToken } from "../lib/auth";
 import { db } from "../lib/firebase";
 import TiQR, { BookingResponse, FetchBookingResponse } from "../lib/tiqr";
@@ -71,7 +75,6 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
       phone_number: body.data.phone,
       email: user.email!,
       ticket: ticketId,
-      quantity: body.data.items.length,
       meta_data: {
         merch: {
           items: body.data.items,
