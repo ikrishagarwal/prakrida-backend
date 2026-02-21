@@ -128,6 +128,7 @@ const PrakridaMerch: FastifyPluginAsync = async (fastify): Promise<void> => {
         items: order.items,
         paymentStatus: order.paymentStatus,
         paymentUrl: order.paymentUrl,
+        updatedAt: order.updatedAt,
       };
     });
 
