@@ -20,6 +20,7 @@ export enum Tickets {
   FreeFire = 2618,
   LawnTennis = 2619,
   LawnTennisGroup = 2610,
+  LawnTennisDoubles = 2707,
   TableTennisTeamWomen = 2621,
   TableTennisWomenSolo = 2623,
   VolleyballWomen = 2612,
@@ -83,10 +84,12 @@ export const EventIds: Record<number, Tickets> = {
   15: Tickets.FreeFire, // E-sports: Free-Fire
 
   // --- Lawn-Tennis ---
-  16: Tickets.LawnTennis, // Lawn-Tennis: Men's
-  17: Tickets.LawnTennis, // Lawn-Tennis: Women's
-  118: Tickets.LawnTennisGroup,
-  119: Tickets.LawnTennisGroup,
+  16: Tickets.LawnTennis, // Lawn-Tennis: Men's Singles
+  17: Tickets.LawnTennis, // Lawn-Tennis: Women's Singles
+  118: Tickets.LawnTennisGroup, // Lawn-Tennis: Men's Group
+  119: Tickets.LawnTennisGroup, // Lawn-Tennis: Women's Group
+  120: Tickets.LawnTennisDoubles, // Lawn-Tennis: Men's Doubles
+  121: Tickets.LawnTennisDoubles, // Lawn-Tennis: Women's Doubles
 
   // --- Table Tennis ---
   18: Tickets.TableTennisTeamMen, // Table Tennis: Team Men's
