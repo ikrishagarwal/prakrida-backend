@@ -35,6 +35,8 @@ const EVENT_NAME_MAP: Record<number, string> = {
   25: "Carrom Mixed Doubles",
   118: "Lawn-Tennis Group",
   119: "Lawn-Tennis Group",
+  120: "Lawn-Tennis Men's Doubles",
+  121: "Lawn-Tennis Women's Doubles",
 };
 
 // Simple CSV generator function
