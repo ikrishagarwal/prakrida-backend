@@ -6,7 +6,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { PaymentStatus } from "./constants";
 
-const FireBaseUIDToExclude = ["crYjzSudspf6OXKmXiw2w77hKsz1", "v7WfDeMamFTSAyQ9RuPgi0Lks7R2"];
+const FireBaseUIDToExclude = [
+  "crYjzSudspf6OXKmXiw2w77hKsz1",
+  "v7WfDeMamFTSAyQ9RuPgi0Lks7R2",
+];
+
 // Event ID to Event Name mapping
 const EVENT_NAME_MAP: Record<number, string> = {
   1: "Cricket Men's",
@@ -23,8 +27,12 @@ const EVENT_NAME_MAP: Record<number, string> = {
   13: "E-sports BGMI",
   14: "E-sports Valorant",
   15: "E-sports Free-Fire",
-  16: "Lawn-Tennis Men's",
-  17: "Lawn-Tennis Women's",
+  16: "Lawn-Tennis Men's Singles",
+  17: "Lawn-Tennis Women's Singles",
+  118: "Lawn-Tennis Men's Group",
+  119: "Lawn-Tennis Women's Group",
+  120: "Lawn-Tennis Men's Doubles",
+  121: "Lawn-Tennis Women's Doubles",
   18: "Table Tennis Team Men's",
   19: "Table Tennis Team Women's",
   20: "Table Tennis Solo Men's",
@@ -33,45 +41,63 @@ const EVENT_NAME_MAP: Record<number, string> = {
   23: "Carrom Men's",
   24: "Carrom Women's",
   25: "Carrom Mixed Doubles",
-  118: "Lawn-Tennis Group",
-  119: "Lawn-Tennis Group",
 };
 
 // Simple CSV generator function
 function convertToCSV(data: any[]): string {
   if (data.length === 0) return "";
 
-  // Get all unique keys
-  const allKeys = new Set<string>();
-  data.forEach((row) => Object.keys(row).forEach((key) => allKeys.add(key)));
+  // Detect if this is accommodation data based on first row
+  const isAccommodation =
+    data.length > 0 &&
+    data[0].eventName === "Accommodation" &&
+    data[0].isAccommodationRow;
 
-  // Define main columns order
-  const mainColumns = [
-    "name",
-    "email",
-    "phone",
-    "eventName",
-    "eventType",
-    "teamName",
-    "college",
-    "status",
-    "role",
-    "gender",
-  ];
+  // Define main columns order based on data type
+  let mainColumns: string[];
+  if (isAccommodation) {
+    mainColumns = [
+      "eventName",
+      "teamName",
+      "college",
+      "status",
+      "name",
+      "email",
+      "phone",
+      "gender",
+    ];
+  } else {
+    mainColumns = [
+      "name",
+      "email",
+      "phone",
+      "eventName",
+      "eventType",
+      "teamName",
+      "college",
+      "status",
+      "role",
+      "gender",
+    ];
+  }
 
-  // Add member columns (member1_name, member1_role, member1_email, etc.)
+  // Add member columns (member1_name, member1_role, member1_email, etc.) for events only
   let maxMembers = 0;
-  data.forEach((row) => {
-    if (row.sortedMembers) {
-      maxMembers = Math.max(maxMembers, row.sortedMembers.length);
-    }
-  });
+  if (!isAccommodation) {
+    data.forEach((row) => {
+      if (row.sortedMembers) {
+        maxMembers = Math.max(maxMembers, row.sortedMembers.length);
+      }
+    });
+  }
 
   const headers = [...mainColumns];
-  for (let i = 1; i <= maxMembers; i++) {
-    headers.push(`member${i}_name`);
-    headers.push(`member${i}_role`);
-    headers.push(`member${i}_email`);
+  if (!isAccommodation) {
+    for (let i = 1; i <= maxMembers; i++) {
+      headers.push(`member${i}_name`);
+      headers.push(`member${i}_role`);
+      headers.push(`member${i}_email`);
+    }
   }
 
   // Escape CSV values
@@ -105,15 +131,17 @@ function convertToCSV(data: any[]): string {
     mainColumns.forEach((col) => {
       rowValues[col] = row[col] || "";
     });
-    // Add member columns
-    if (row.sortedMembers) {
+    // Add member columns (for events only)
+    if (!isAccommodation && row.sortedMembers) {
       row.sortedMembers.forEach((member: any, index: number) => {
         rowValues[`member${index + 1}_name`] = member.name || "";
         rowValues[`member${index + 1}_role`] = member.role || "";
         rowValues[`member${index + 1}_email`] = member.email || "";
       });
     }
-    return headers.map((header) => escapeCSV(rowValues[header], header)).join(",");
+    return headers
+      .map((header) => escapeCSV(rowValues[header], header))
+      .join(",");
   });
 
   return [headerRow, ...dataRows].join("\n");
@@ -137,11 +165,17 @@ async function main() {
   console.log("2. Confirmed Registrations");
   console.log("3. All Registrations");
   console.log("4. Specific Event ID");
-  console.log("5. Accommodation Registrations\n");
-  console.log("Note: You can select multiple options by separating them with commas (e.g., 1,2,4).\n");
+  console.log("5. Confirmed Accommodation");
+  console.log("6. Pending Accommodation\n");
+  console.log(
+    "Note: You can select multiple options by separating them with commas (e.g., 1,2,5).\n",
+  );
 
   const answer = await rl.question("Choose options: ");
-  const choices = answer.split(",").map((s) => s.trim()).filter((s) => s !== "");
+  const choices = answer
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
 
   if (choices.length === 0) {
     console.log("No valid choices provided. Exiting.");
@@ -152,14 +186,30 @@ async function main() {
 
   for (const choice of choices) {
     if (choice === "1") {
-      exportTasks.push({ type: "events", statusFilter: PaymentStatus.PendingPayment, filename: "pending_events.csv" });
+      exportTasks.push({
+        type: "events",
+        statusFilter: PaymentStatus.PendingPayment,
+        filename: "pending_events.csv",
+      });
     } else if (choice === "2") {
-      exportTasks.push({ type: "events", statusFilter: PaymentStatus.Confirmed, filename: "confirmed_events.csv" });
+      exportTasks.push({
+        type: "events",
+        statusFilter: PaymentStatus.Confirmed,
+        filename: "confirmed_events.csv",
+      });
     } else if (choice === "3") {
-      exportTasks.push({ type: "events", statusFilter: undefined, filename: "all_events.csv" });
+      exportTasks.push({
+        type: "events",
+        statusFilter: undefined,
+        filename: "all_events.csv",
+      });
     } else if (choice === "4") {
-      const specificEventId = await rl.question("\nEnter Event ID for option 4: ");
-      const statusChoice = await rl.question(`Filter by status for Event ${specificEventId}? (1: Pending, 2: Confirmed, 3: All): `);
+      const specificEventId = await rl.question(
+        "\nEnter Event ID for option 4: ",
+      );
+      const statusChoice = await rl.question(
+        `Filter by status for Event ${specificEventId}? (1: Pending, 2: Confirmed, 3: All): `,
+      );
       let statusFilter;
       let filename;
       if (statusChoice === "1") {
@@ -172,22 +222,24 @@ async function main() {
         statusFilter = undefined;
         filename = `event_${specificEventId}_all.csv`;
       }
-      exportTasks.push({ type: "events", specificEventId, statusFilter, filename });
+      exportTasks.push({
+        type: "events",
+        specificEventId,
+        statusFilter,
+        filename,
+      });
     } else if (choice === "5") {
-      const statusChoice = await rl.question(`\nFilter accommodation by status? (1: Pending, 2: Confirmed, 3: All): `);
-      let statusFilter;
-      let filename;
-      if (statusChoice === "1") {
-        statusFilter = PaymentStatus.PendingPayment;
-        filename = `accommodation_pending.csv`;
-      } else if (statusChoice === "2") {
-        statusFilter = PaymentStatus.Confirmed;
-        filename = `accommodation_confirmed.csv`;
-      } else {
-        statusFilter = undefined;
-        filename = `accommodation_all.csv`;
-      }
-      exportTasks.push({ type: "accommodation", statusFilter, filename });
+      exportTasks.push({
+        type: "accommodation",
+        statusFilter: PaymentStatus.Confirmed,
+        filename: "accommodation_confirmed.csv",
+      });
+    } else if (choice === "6") {
+      exportTasks.push({
+        type: "accommodation",
+        statusFilter: PaymentStatus.PendingPayment,
+        filename: "accommodation_pending.csv",
+      });
     } else {
       console.log(`Warning: Invalid choice '${choice}', skipping.`);
     }
@@ -201,10 +253,10 @@ async function main() {
   console.log("\nFetching data from Firestore (this may take a moment)...");
 
   try {
-    const eventsSnapshot = exportTasks.some(t => t.type === "events")
+    const eventsSnapshot = exportTasks.some((t) => t.type === "events")
       ? await db.collection("events_registrations").get()
       : null;
-    const accomSnapshot = exportTasks.some(t => t.type === "accommodation")
+    const accomSnapshot = exportTasks.some((t) => t.type === "accommodation")
       ? await db.collection("accommodation").get()
       : null;
 
@@ -221,45 +273,54 @@ async function main() {
           const userData = doc.data();
           const events = userData.events || {};
 
-          Object.entries(events).forEach(([eventId, eventData]: [string, any]) => {
-            // Apply filters
-            if (task.specificEventId && eventId !== task.specificEventId) {
-              return;
-            }
-            if (task.statusFilter && eventData.status !== task.statusFilter) {
-              return;
-            }
+          Object.entries(events).forEach(
+            ([eventId, eventData]: [string, any]) => {
+              // Apply filters
+              if (task.specificEventId && eventId !== task.specificEventId) {
+                return;
+              }
+              if (task.statusFilter && eventData.status !== task.statusFilter) {
+                return;
+              }
 
-            // Sort members: Captain first, then Vice-Captain, then others
-            const sortedMembers = (eventData.members || []).sort((a: any, b: any) => {
-              const roleOrder = { Captain: 0, "Vice-Captain": 1 };
-              const aOrder = roleOrder[a.role as keyof typeof roleOrder] ?? Number.MAX_SAFE_INTEGER;
-              const bOrder = roleOrder[b.role as keyof typeof roleOrder] ?? Number.MAX_SAFE_INTEGER;
-              return aOrder - bOrder;
-            });
+              // Sort members: Captain first, then Vice-Captain, then others
+              const sortedMembers = (eventData.members || []).sort(
+                (a: any, b: any) => {
+                  const roleOrder = { Captain: 0, "Vice-Captain": 1 };
+                  const aOrder =
+                    roleOrder[a.role as keyof typeof roleOrder] ??
+                    Number.MAX_SAFE_INTEGER;
+                  const bOrder =
+                    roleOrder[b.role as keyof typeof roleOrder] ??
+                    Number.MAX_SAFE_INTEGER;
+                  return aOrder - bOrder;
+                },
+              );
 
-            const eventIdNum = parseInt(eventId) || 0;
-            const registration = {
-              name: userData.name || "",
-              email: userData.email || "",
-              phone: userData.phone || "",
-              eventName: EVENT_NAME_MAP[eventIdNum] || eventId,
-              eventType: eventData.type || "",
-              teamName: eventData.teamName || "",
-              college: eventData.college || "",
-              status: eventData.status,
-              role: eventData.role || "",
-              gender: eventData.gender || "",
-              sortedMembers: sortedMembers,
-            };
+              const eventIdNum = parseInt(eventId) || 0;
+              const registration = {
+                name: userData.name || "",
+                email: userData.email || "",
+                phone: userData.phone || "",
+                eventName: EVENT_NAME_MAP[eventIdNum] || eventId,
+                eventType: eventData.type || "",
+                teamName: eventData.teamName || "",
+                college: eventData.college || "",
+                status: eventData.status,
+                role: eventData.role || "",
+                gender: eventData.gender || "",
+                sortedMembers: sortedMembers,
+              };
 
-            registrations.push(registration);
-          });
+              registrations.push(registration);
+            },
+          );
         });
       } else if (task.type === "accommodation" && accomSnapshot) {
         accomSnapshot.docs.forEach((doc) => {
           const data = doc.data();
-          if (FireBaseUIDToExclude.includes(doc.id) || FireBaseUIDToExclude.includes(data.ownerUID)) {
+          // Only check ownerUID for exclusion
+          if (FireBaseUIDToExclude.includes(data.ownerUID)) {
             return;
           }
 
@@ -267,21 +328,29 @@ async function main() {
             return;
           }
 
-          const registration = {
-            eventName: "Accommodation",
-            teamName: doc.id, // Group ID
-            college: data.college || "",
-            status: data.paymentStatus || "",
-            sortedMembers: data.members || [],
-          };
-
-          registrations.push(registration);
+          // Create one row per member
+          const members = data.members || [];
+          members.forEach((member: any) => {
+            const registration = {
+              eventName: "Accommodation",
+              teamName: doc.id, // Group ID
+              college: data.college || "",
+              status: data.paymentStatus || "",
+              name: member.name || "",
+              email: member.email || "",
+              phone: member.phone || "",
+              gender: member.gender || "",
+              isAccommodationRow: true,
+            };
+            registrations.push(registration);
+          });
         });
       }
 
       // Sort the final array by eventName and role
       registrations.sort((a, b) => {
-        if (a.eventName !== b.eventName) return a.eventName.localeCompare(b.eventName);
+        if (a.eventName !== b.eventName)
+          return a.eventName.localeCompare(b.eventName);
 
         const roleOrder = { Captain: 0, "Vice-Captain": 1 };
         const aOrder =
@@ -295,12 +364,16 @@ async function main() {
       });
 
       if (registrations.length === 0) {
-        console.log(`No registrations found matching the criteria for ${task.filename}.`);
+        console.log(
+          `No registrations found matching the criteria for ${task.filename}.`,
+        );
       } else {
         const csv = convertToCSV(registrations);
         const outPath = path.join(process.cwd(), task.filename);
         fs.writeFileSync(outPath, csv, "utf-8");
-        console.log(`Successfully exported ${registrations.length} registrations to ${outPath}`);
+        console.log(
+          `Successfully exported ${registrations.length} registrations to ${outPath}`,
+        );
       }
     }
   } catch (error) {
