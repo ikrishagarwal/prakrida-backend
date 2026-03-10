@@ -81,7 +81,7 @@ function convertToCSV(data: any[]): string {
     ];
   }
 
-  // Add member columns (member1_name, member1_role, member1_email, etc.) for events only
+  // Add member columns (member1_name, member1_role, member1_email, member1_phone, etc.) for events only
   let maxMembers = 0;
   if (!isAccommodation) {
     data.forEach((row) => {
@@ -97,6 +97,7 @@ function convertToCSV(data: any[]): string {
       headers.push(`member${i}_name`);
       headers.push(`member${i}_role`);
       headers.push(`member${i}_email`);
+      headers.push(`member${i}_phone`);
     }
   }
 
@@ -106,8 +107,11 @@ function convertToCSV(data: any[]): string {
     const str = String(val);
 
     // Force phone as text with leading single quote to prevent Excel scientific notation
-    if (key === "phone") {
-      return `"'${str.replace(/"/g, '""')}"`;
+    // Apply to all phone columns (main + member phones)
+    if (key === "phone" || key.includes("phone")) {
+      // Hack: prepend single quote without outer quotes for CSV format
+      // This forces Excel to treat the entire value as text
+      return `'${str}`;
     }
 
     // Always quote emails
@@ -137,6 +141,7 @@ function convertToCSV(data: any[]): string {
         rowValues[`member${index + 1}_name`] = member.name || "";
         rowValues[`member${index + 1}_role`] = member.role || "";
         rowValues[`member${index + 1}_email`] = member.email || "";
+        rowValues[`member${index + 1}_phone`] = member.phone || "";
       });
     }
     return headers
